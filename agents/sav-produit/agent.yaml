@@ -1,0 +1,31 @@
+# Fiche agent — alimente le registre des agents (cf. governance/)
+id: sav-produit
+name: Assistant SAV produit
+version: 0.1.0
+status: pilot              # idea | design | pilot | production | retired
+purpose: >
+  Répondre aux questions des clients de l'enseigne (fictive) Maison Kerlenn sur les produits,
+  la livraison, les retours et la garantie, à partir de la documentation officielle uniquement.
+  Escalader vers un conseiller humain dès que la réponse n'est pas dans la documentation.
+owners:
+  business: Direction Service Client
+  tech: Équipe Solutions IA
+risk:
+  ai_act: limited          # interaction avec des personnes → obligation de transparence (art. 50)
+  personal_data: false     # l'agent ne demande ni ne stocke de données personnelles
+  notes: >
+    L'utilisateur est informé qu'il échange avec une IA. Pas de décision automatisée.
+    Aucune donnée de commande ou client n'est accessible dans cette version.
+model:
+  provider: gemini
+  name: gemini-2.5-flash
+  temperature: 0.2
+  max_output_tokens: 600
+prompt_file: system.md
+knowledge_dir: knowledge
+budget:
+  daily_usd: 2.0
+  max_requests_per_user_per_day: 30
+evaluation:
+  dataset: ../../evals/sav-produit.jsonl
+  min_score: 0.85

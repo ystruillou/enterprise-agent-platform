@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Enterprise Agent Platform</title>
+  <style>
+    :root { --bg:#f7f7f5; --card:#fff; --ink:#1d1d1b; --muted:#6b6b66; --line:#e3e3de; --accent:#1a5fb4; }
+    @media (prefers-color-scheme: dark) { :root { --bg:#161615; --card:#1f1f1d; --ink:#ececea; --muted:#9a9a94; --line:#33332f; --accent:#78aeed; } }
+    * { box-sizing:border-box; }
+    body { margin:0; font:15px/1.5 system-ui, sans-serif; background:var(--bg); color:var(--ink); }
+    main { max-width:820px; margin:0 auto; padding:24px 16px; }
+    h1 { font-size:22px; margin:0 0 4px; } .muted { color:var(--muted); font-size:13px; }
+    .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:16px; margin-top:16px; }
+    select, textarea, button { font:inherit; color:inherit; background:var(--card); border:1px solid var(--line); border-radius:8px; padding:8px 10px; }
+    textarea { width:100%; min-height:80px; resize:vertical; margin-top:8px; }
+    button { background:var(--accent); color:#fff; border:0; cursor:pointer; margin-top:8px; }
+    .msg { white-space:pre-wrap; padding:10px 0; border-top:1px solid var(--line); }
+    .meta { font-size:12px; color:var(--muted); font-family:ui-monospace, monospace; }
+    table { width:100%; border-collapse:collapse; font-size:13px; } td, th { text-align:left; padding:4px 6px; border-bottom:1px solid var(--line); }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Enterprise Agent Platform</h1>
+  <div class="muted">Démo : agents métier multi-modèles, avec traçabilité, FinOps et gouvernance. Vous échangez avec une IA.</div>
+
+  <div class="card">
+    <label>Agent <select id="agent"></select></label>
+    <div id="purpose" class="muted"></div>
+    <textarea id="input" placeholder="Ex. : Quel est le délai pour retourner un produit ?"></textarea>
+    <button id="send">Envoyer</button>
+    <div id="log"></div>
+  </div>
+
+  <div class="card">
+    <strong>FinOps : consommation du jour</strong> <span id="total" class="muted"></span>
+    <table><thead><tr><th>Agent</th><th>Modèle</th><th>Requêtes</th><th>Tokens (entrée/sortie)</th><th>Coût USD</th></tr></thead><tbody id="usage"></tbody></table>
+  </div>
+</main>
+<script>
+  const $ = id => document.getElementById(id);
+  let agents = [];
+  const userId = (() => { try { let u = localStorage.getItem('eap-user'); if (!u) { u = 'demo-' + Math.random().toString(36).slice(2, 8); localStorage.setItem('eap-user', u); } return u; } catch { return 'demo'; } })();
+
+  async function loadAgents() {
+    agents = await (await fetch('/agents')).json();
+    $('agent').innerHTML = agents.map(a => `<option value="${a.id}">${a.name} (${a.status})</option>`).join('');
+    showPurpose();
+  }
+  function showPurpose() { const a = agents.find(x => x.id === $('agent').value); $('purpose').textContent = a ? a.purpose : ''; }
+
+  async function send() {
+    const message = $('input').value.trim(); if (!message) return;
+    $('send').disabled = true;
+    const r = await fetch(`/agents/${$('agent').value}/chat`, { method:'POST', headers:{ 'Content-Type':'application/json', 'X-User-Id': userId }, body: JSON.stringify({ message }) });
+    const data = await r.json();
+    const div = document.createElement('div'); div.className = 'msg';
+    div.textContent = r.ok ? `Vous : ${message}\n\n${data.answer}` : `Erreur ${r.status} : ${data.error}`;
+    if (r.ok) { const m = document.createElement('div'); m.className = 'meta';
+      m.textContent = `${data.usage.provider}/${data.usage.model} · ${data.usage.inputTokens}+${data.usage.outputTokens} tokens · ${data.usage.costUsd.toFixed(6)} $ · ${data.usage.latencyMs} ms · trace ${data.traceId.slice(0, 12)} · sources : ${data.sources.join(', ') || 'aucune'}`;
+      div.appendChild(m); }
+    $('log').prepend(div); $('send').disabled = false; loadUsage();
+  }
+
+  async function loadUsage() {
+    const u = await (await fetch('/finops/usage')).json();
+    $('total').textContent = `total : ${u.totalUsd.toFixed(6)} $`;
+    $('usage').innerHTML = u.lines.map(l => `<tr><td>${l.agentId}</td><td>${l.provider}/${l.model}</td><td>${l.requests}</td><td>${l.inputTokens} / ${l.outputTokens}</td><td>${l.costUsd.toFixed(6)}</td></tr>`).join('');
+  }
+
+  $('agent').onchange = showPurpose; $('send').onclick = send;
+  loadAgents(); loadUsage();
+</script>
+</body>
+</html>

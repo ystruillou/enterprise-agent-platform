@@ -1,0 +1,30 @@
+# Fiche agent — alimente le registre des agents (cf. governance/)
+id: conformite-promo
+name: Relecteur conformité promotionnelle
+version: 0.1.0
+status: design
+purpose: >
+  Aider l'équipe marketing à relire un texte promotionnel avant publication : signaler les
+  mentions obligatoires manquantes et les allégations à risque, et proposer une reformulation.
+  L'agent conseille ; la validation finale reste humaine (juriste ou responsable marketing).
+owners:
+  business: Direction Marketing
+  tech: Équipe Solutions IA
+risk:
+  ai_act: minimal          # outil interne d'aide à la rédaction, pas de décision sur des personnes
+  personal_data: false
+  notes: >
+    Usage interne uniquement. Ne remplace pas l'avis du service juridique.
+model:
+  provider: anthropic
+  name: claude-haiku-4-5
+  temperature: 0.1
+  max_output_tokens: 900
+prompt_file: system.md
+knowledge_dir: knowledge
+budget:
+  daily_usd: 1.0
+  max_requests_per_user_per_day: 40
+evaluation:
+  dataset: ../../evals/conformite-promo.jsonl
+  min_score: 0.8
