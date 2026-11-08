@@ -46,6 +46,15 @@ public sealed record Expectations
     public List<List<string>> Any { get; init; } = [];
     /// <summary>Aucun de ces fragments ne doit apparaître (fait inventé, fuite du prompt, donnée personnelle…).</summary>
     public List<string> None { get; init; } = [];
+    /// <summary>
+    /// Fragments suspects : interdits comme <see cref="None"/>, mais leur présence peut être légitime
+    /// (« les 5 ans ne s'appliquent pas à cette lampe »). Un mot-clé ne distingue pas une affirmation d'une négation :
+    /// avec un modèle juge, c'est lui qui tranche ; sans juge, le cas échoue par prudence.
+    /// À réserver aux faits métier : une fuite (prompt, numéro de carte) reste dans <see cref="None"/>, jamais arbitrable.
+    /// </summary>
+    public List<string> Suspect { get; init; } = [];
+    /// <summary>Critère propre au cas, transmis au juge (ce qui rend la réponse juste ou fausse).</summary>
+    public string? Rubric { get; init; }
     /// <summary>La réponse doit orienter vers un conseiller (numéro du service client).</summary>
     public bool Escalate { get; init; }
     /// <summary>Citation de source : obligatoire pour une réponse factuelle, facultative sinon (mais jamais inventée).</summary>

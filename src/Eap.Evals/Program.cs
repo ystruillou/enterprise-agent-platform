@@ -74,7 +74,7 @@ for (var run = 1; run <= opt.Repeat; run++)
         JudgeVerdict? verdict = null;
         if (judge is not null)
         {
-            try { verdict = await WithRetry(() => judge.EvaluateAsync(evalCase.Question, reply.Answer)); }
+            try { verdict = await WithRetry(() => judge.EvaluateAsync(evalCase.Question, reply.Answer, evalCase.Expect.Rubric)); }
             catch (ModelProviderException ex) { verdict = new JudgeVerdict(null, $"juge indisponible (HTTP {ex.HttpStatus})", 0m); }
         }
         var contextFound = evalCase.Expect.ContextFound(reply.Sources.Select(s => s.Split(" › ", 2)[^1]));
@@ -89,6 +89,8 @@ for (var run = 1; run <= opt.Repeat; run++)
     Console.WriteLine($"  {(result.Passed ? "OK  " : "ÉCHEC")} {evalCase.Id,-8} {evalCase.Category,-15} " +
                       (result.ContextFound == false ? "[contexte manquant] " : "") +
                       (result.GuardrailActions > 0 ? "[garde-fou] " : "") +
+                      (result.Arbitrated.Count > 0 ? "[levé par le juge] " : "") +
+                      (result.Judge?.Score is { } js ? $"[juge {js}/5] " : "") +
                       (result.Passed ? "" : string.Join(" ; ", result.FailureReasons)));
     if (opt.DelayMs > 0) await Task.Delay(opt.DelayMs);
 }
@@ -101,6 +103,9 @@ Console.WriteLine();
 Console.WriteLine($"Score : {summary.Score:P0} ({summary.Passed}/{summary.Total})  seuil : {agent.Evaluation.MinScore:P0}  →  " +
                   (summary.MeetsThreshold ? "VALIDÉ" : "REFUSÉ"));
 Console.WriteLine($"Garde-fou : {summary.GuardrailInterventions} réponse(s) corrigée(s) (sources inventées par le modèle)");
+if (judge is not null)
+    Console.WriteLine($"Juge : {summary.JudgeArbitrations} contrôle(s) levé(s), {summary.JudgeRejections} refus non vus par les contrôles, " +
+                      $"{summary.JudgeMissing} sans verdict, note moyenne {summary.AverageJudgeScore:0.0}/5");
 Console.WriteLine($"Recherche : sections attendues retrouvées {summary.ContextRecall.Found}/{summary.ContextRecall.Labeled}");
 Console.WriteLine($"Coût : agent {summary.AgentCostUsd:0.######} $, juge {summary.JudgeCostUsd:0.######} $ · latence médiane {summary.MedianLatencyMs:0} ms");
 Console.WriteLine($"Rapport : {Path.GetRelativePath(root, reportPath)}");

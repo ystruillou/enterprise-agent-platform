@@ -9,12 +9,25 @@ public sealed record CaseResult(
     JudgeVerdict? Judge, UsageRecord? Usage, string? Error, bool? ContextFound = null, int GuardrailActions = 0,
     string? ModelAnswer = null)
 {
-    /// <summary>Un cas réussit si tous les contrôles passent et, si un juge est utilisé, s'il donne au moins 4/5.</summary>
-    public bool Passed => Error is null && Checks.All(c => c.Passed) && (Judge?.Score is null || Judge.Score >= LlmJudge.PassScore);
+    private bool JudgeApproves => Judge?.Score >= LlmJudge.PassScore;
+
+    /// <summary>
+    /// Un cas réussit si tous les contrôles passent et, si un juge est utilisé, s'il donne au moins 4/5.
+    /// Exception : un contrôle arbitrable (fragment suspect) en échec est levé quand le juge valide la réponse.
+    /// Sans verdict du juge (absent, indisponible, illisible), il reste en échec : le doute ne profite pas au modèle.
+    /// </summary>
+    public bool Passed => Error is null
+        && Checks.All(c => c.Passed || (c.Arbitrable && JudgeApproves))
+        && (Judge?.Score is null || JudgeApproves);
+
+    /// <summary>Contrôles en échec levés par le juge : à relire, car c'est là qu'un juge trop indulgent se verrait.</summary>
+    public IReadOnlyList<CheckResult> Arbitrated =>
+        JudgeApproves ? Checks.Where(c => !c.Passed && c.Arbitrable).ToList() : [];
 
     public IEnumerable<string> FailureReasons =>
         Error is not null ? [Error]
-        : Checks.Where(c => !c.Passed).Select(c => c.Detail is null ? c.Name : $"{c.Name} : {c.Detail}")
+        : Checks.Where(c => !c.Passed && !(c.Arbitrable && JudgeApproves))
+            .Select(c => (c.Detail is null ? c.Name : $"{c.Name} : {c.Detail}") + (c.Arbitrable && Judge is null ? " (aucun juge pour arbitrer)" : ""))
             .Concat(Judge?.Score is < LlmJudge.PassScore ? [$"juge {Judge.Score}/5 : {Judge.Reason}"] : []);
 }
 
@@ -22,10 +35,19 @@ public sealed record EvalSummary(
     AgentManifest Agent, string Provider, string Model, string? ServedModel, string? JudgeLabel,
     string Retrieval, IReadOnlyList<CaseResult> Results, DateTimeOffset At)
 {
-    /// <summary>Cas dont la recherche a retrouvé les sections attendues, parmi ceux qui en déclarent.</summary>
     /// <summary>Réponses corrigées par un garde-fou : le score mesure ce que voit l'utilisateur, ce compteur montre le modèle brut.</summary>
     public int GuardrailInterventions => Results.Count(r => r.GuardrailActions > 0);
 
+    /// <summary>Cas sauvés par le juge (contrôle par mots-clés levé) : le score sans juge serait plus bas d'autant.</summary>
+    public int JudgeArbitrations => Results.Count(r => r.Arbitrated.Count > 0);
+
+    /// <summary>Réponses que les contrôles valident mais que le juge refuse : ce que les mots-clés ne voient pas.</summary>
+    public int JudgeRejections => Results.Count(r => r.Error is null && r.Checks.All(c => c.Passed) && r.Judge?.Score < LlmJudge.PassScore);
+
+    /// <summary>Appels au juge sans note exploitable (indisponible, réponse illisible).</summary>
+    public int JudgeMissing => JudgeLabel is null ? 0 : Results.Count(r => r.Error is null && r.Judge?.Score is null);
+
+    /// <summary>Cas dont la recherche a retrouvé les sections attendues, parmi ceux qui en déclarent.</summary>
     public (int Found, int Labeled) ContextRecall =>
         (Results.Count(r => r.ContextFound == true), Results.Count(r => r.ContextFound is not null));
     public int Total => Results.Count;
@@ -67,7 +89,7 @@ public static class ReportWriter
         sb.AppendLine($"| Modèle | `{s.Provider}/{s.Model}`{(s.ServedModel is { } sm && sm != s.Model ? $" (servi : `{sm}`)" : "")} |");
         sb.AppendLine($"| Recherche documentaire | {s.Retrieval} · sections attendues retrouvées : {s.ContextRecall.Found}/{s.ContextRecall.Labeled} |");
         sb.AppendLine($"| Garde-fou des sources | {(s.Agent.Guardrails.VerifySources ? $"actif · {s.GuardrailInterventions} réponse(s) corrigée(s)" : "désactivé (modèle brut)")} |");
-        sb.AppendLine($"| Juge | {(s.JudgeLabel is null ? "aucun (contrôles déterministes seuls)" : $"`{s.JudgeLabel}`")} |");
+        sb.AppendLine($"| Juge | {(s.JudgeLabel is null ? "aucun (contrôles déterministes seuls)" : $"`{s.JudgeLabel}` · {s.JudgeArbitrations} contrôle(s) levé(s) · {s.JudgeRejections} refus que les contrôles n'ont pas vus{(s.JudgeMissing > 0 ? $" · {s.JudgeMissing} sans verdict" : "")}")} |");
         sb.AppendLine($"| **Score** | **{s.Score:P0}** ({s.Passed}/{s.Total}) |");
         sb.AppendLine($"| Seuil de passage en production | {s.Agent.Evaluation.MinScore:P0} |");
         sb.AppendLine($"| **Verdict** | **{(s.MeetsThreshold ? "✅ VALIDÉ" : "❌ REFUSÉ")}** |");
@@ -101,6 +123,18 @@ public static class ReportWriter
             sb.AppendLine("| Cas | Citation d'origine du modèle (remplacée) |").AppendLine("|---|---|");
             foreach (var r in guarded)
                 sb.AppendLine($"| {r.Case.Id}{(r.Run > 1 ? $" (essai {r.Run})" : "")} | {(r.ModelAnswer is { } m ? Eap.Core.Guardrails.SourceLine.Extract(m) : null)?.Replace("|", "/") ?? "?"} |");
+            sb.AppendLine();
+        }
+
+        // Décisions du juge qui changent le verdict des contrôles, dans un sens comme dans l'autre : à relire par un humain.
+        var arbitrated = s.Results.Where(r => r.Arbitrated.Count > 0).ToList();
+        if (arbitrated.Count > 0)
+        {
+            sb.AppendLine($"## Contrôles levés par le juge ({arbitrated.Count})").AppendLine();
+            sb.AppendLine("| Cas | Fragment suspect présent | Note | Raison du juge |").AppendLine("|---|---|---|---|");
+            foreach (var r in arbitrated)
+                sb.AppendLine($"| {r.Case.Id}{(r.Run > 1 ? $" (essai {r.Run})" : "")} | {string.Join(", ", r.Arbitrated.Select(c => c.Detail))} | " +
+                              $"{r.Judge!.Score}/5 | {r.Judge.Reason.Replace("|", "/")} |");
             sb.AppendLine();
         }
 

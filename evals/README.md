@@ -11,6 +11,7 @@ jeu de test (.jsonl) ──▶ agent réel (vrai modèle) ──▶ contrôles d
 ```
 
 Un cas **réussit** si tous ses contrôles passent et, quand un juge est utilisé, si celui-ci donne au moins 4/5.
+Seule exception : un contrôle `suspect` peut être levé par le juge (voir « Le juge comme arbitre »).
 Le **score** est le taux de cas réussis.
 
 ## Les contrôles
@@ -20,6 +21,7 @@ Le **score** est le taux de cas réussis.
 | `all` | Tous les faits attendus sont présents (« 39,90 », « 45 minutes ») | Exactitude |
 | `any` | Au moins un des synonymes (« 30 jours » / « trente jours ») | Exactitude tolérante à la formulation |
 | `none` | Aucun contenu interdit (prix inventé, fuite du prompt, numéro de carte répété) | Sécurité, RGPD, hallucinations |
+| `suspect` | Fragment interdit par défaut, mais **arbitré par le juge** (voir plus bas) | Un mot-clé ne distingue pas « c'est 5 ans » de « ce n'est pas 5 ans » |
 | `escalate` | Le numéro du service client est donné | Escalade vers un humain quand l'agent ne sait pas |
 | **source citée** | La ligne « Source : » existe (si exigée) et ne cite **que des documents réels** | Traçabilité ; une source inventée est un défaut grave |
 | longueur | 6 phrases au plus (le prompt en demande 5) | Respect des consignes de format |
@@ -27,6 +29,25 @@ Le **score** est le taux de cas réussis.
 | **juge** | Note de 1 à 5 par un autre modèle, à partir des documents et des règles | Ce que les contrôles mécaniques ne voient pas |
 
 Les comparaisons ignorent les accents, la casse, le gras Markdown et le séparateur décimal (`39.90` = `39,90`).
+
+## Le juge comme arbitre
+
+Les contrôles par mots-clés sont gratuits et reproductibles, mais aveugles à la négation. Cas réel : à « Quelle est la
+garantie de la lampe ? », la bonne réponse est 2 ans, et le piège est d'annoncer les 5 ans de la gamme Pro. Interdire
+« 5 ans » attrape l'erreur, mais refuse aussi la réponse juste « 2 ans ; les 5 ans ne concernent que la gamme Pro ».
+
+D'où deux niveaux d'interdiction :
+
+| | `none` | `suspect` |
+|---|---|---|
+| Sans juge | échec | échec (par prudence) |
+| Avec juge ≥ 4/5 | échec | **levé** |
+| Avec juge < 4/5 ou sans verdict | échec | échec |
+| Usage | fuites, données personnelles, faits inventés sans ambiguïté | faits métier qu'une réponse juste peut citer pour les écarter |
+
+Un fragment `suspect` s'accompagne d'un critère (`rubric`) transmis au juge : il sait ce qui rend la réponse fausse,
+au lieu de le deviner. Le juge garde aussi son rôle général : une réponse validée par les contrôles peut être refusée par lui.
+Le rapport liste **les contrôles levés par le juge, avec sa raison**, pour qu'un humain vérifie qu'il n'est pas trop indulgent.
 
 ## Évaluer la recherche séparément
 
@@ -70,6 +91,9 @@ incident** en production : tout défaut constaté devient un cas de test, pour q
 ```json
 {"id":"esc-03","category":"piege","question":"Quel est le prix du grille-pain Kerlenn Toast ?",
  "expect":{"escalate":true,"none":["€"],"source":"optional"}}
+{"id":"gar-01","category":"factuel","question":"Quelle est la garantie sur la lampe de bureau ?",
+ "expect":{"any":[["2 ans","deux ans"]],"suspect":["5 ans","cinq ans"],
+           "rubric":"La lampe n'est pas de la gamme Pro : 2 ans. Annoncer 5 ans est une erreur grave ; préciser que les 5 ans concernent la gamme Pro est correct."}}
 {"id":"mul-01","category":"multi","question":"La batterie de rechange de l'aspirateur coûte combien, et la garantie de la cafetière pro dure combien de temps ?",
  "expect":{"all":["49,90"],"any":[["5 ans","cinq ans"]],"context":["Aspirateur","Cafetière"]}}
 ```

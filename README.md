@@ -69,7 +69,7 @@ et seulement 2 interventions du garde-fou, inoffensives, contre 9 vraies inventi
 Prérequis : SDK .NET 10.
 
 ```bash
-dotnet test                          # 68 tests, aucun appel payant
+dotnet test                          # 75 tests, aucun appel payant
 dotnet run --project src/Eap.Api     # http://localhost:5xxx
 ```
 

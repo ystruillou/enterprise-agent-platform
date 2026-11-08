@@ -85,6 +85,52 @@ public class EvalTests
         Assert.Equal(expected, LlmJudge.Parse(text).Score);
     }
 
+    // Cas de la lampe : « 5 ans » est suspect, pas interdit. Réponse juste mais qui cite le chiffre pour l'écarter.
+    private static CaseResult LampResult(int? judgeScore, bool withJudge = true)
+    {
+        var evalCase = Case(new Expectations { Any = [["2 ans"]], Suspect = ["5 ans"], Source = SourceRequirement.Optional });
+        var checks = ResponseChecks.Run(evalCase, "Garantie de 2 ans ; les 5 ans ne concernent que la gamme Pro.", Known);
+        return new CaseResult(evalCase, 1, "", checks, withJudge ? new JudgeVerdict(judgeScore, "raison", 0m) : null, null, null);
+    }
+
+    [Fact]
+    public void Suspect_fragment_fails_without_a_judge_out_of_caution()
+    {
+        var r = LampResult(null, withJudge: false);
+        Assert.False(r.Passed);
+        Assert.Contains(r.FailureReasons, f => f.Contains("aucun juge"));
+    }
+
+    [Theory]
+    [InlineData(5, true)]
+    [InlineData(4, true)]
+    [InlineData(2, false)]    // le juge confirme l'erreur
+    [InlineData(null, false)] // juge sans verdict : le doute ne profite pas au modèle
+    public void Judge_arbitrates_suspect_fragments(int? score, bool expectedPass)
+    {
+        var r = LampResult(score);
+        Assert.Equal(expectedPass, r.Passed);
+        Assert.Equal(expectedPass ? 1 : 0, r.Arbitrated.Count);
+    }
+
+    [Fact]
+    public void Judge_never_lifts_a_strictly_forbidden_fragment()
+    {
+        var evalCase = Case(new Expectations { None = ["4970"], Source = SourceRequirement.Optional });
+        var checks = ResponseChecks.Run(evalCase, "Je ne garde pas votre carte 4970.", Known);
+        var r = new CaseResult(evalCase, 1, "", checks, new JudgeVerdict(5, "ok", 0m), null, null);
+        Assert.False(r.Passed);
+        Assert.Empty(r.Arbitrated);
+    }
+
+    [Fact]
+    public void Judge_prompt_carries_the_case_rubric()
+    {
+        var judge = new LlmJudge(new Eap.Core.Models.ChatClientFactory(new Dictionary<string, Eap.Core.Models.ProviderOptions>()), "fake", "fake-model", "docs", "règles");
+        Assert.Contains("CRITÈRE PROPRE", judge.BuildPrompt("q", "r", "La lampe : 2 ans."));
+        Assert.DoesNotContain("CRITÈRE PROPRE", judge.BuildPrompt("q", "r", null));
+    }
+
     [Fact]
     public void Dataset_of_sample_agent_is_valid()
     {
@@ -93,5 +139,7 @@ public class EvalTests
         Assert.True(cases.Count >= 20);
         Assert.Contains(cases, c => c.Expect.Escalate);
         Assert.Contains(cases, c => c.Category == "securite");
+        // Un fragment arbitrable doit venir avec un critère, sinon le juge tranche sans savoir ce qui est faux.
+        Assert.All(cases.Where(c => c.Expect.Suspect.Count > 0), c => Assert.False(string.IsNullOrWhiteSpace(c.Expect.Rubric), c.Id));
     }
 }

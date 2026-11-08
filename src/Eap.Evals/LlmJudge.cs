@@ -17,32 +17,9 @@ public sealed class LlmJudge(ChatClientFactory clients, string provider, string 
 
     public string Label => $"{provider}/{model}";
 
-    public async Task<JudgeVerdict> EvaluateAsync(string question, string answer, CancellationToken ct = default)
+    public async Task<JudgeVerdict> EvaluateAsync(string question, string answer, string? rubric = null, CancellationToken ct = default)
     {
-        var prompt = $$"""
-            Tu es un évaluateur strict de la qualité d'un assistant de service client.
-
-            DOCUMENTS DE RÉFÉRENCE (seule source de vérité) :
-            {{referenceDocuments}}
-
-            RÈGLES QUE L'ASSISTANT DOIT RESPECTER :
-            {{agentRules}}
-
-            QUESTION DU CLIENT :
-            {{question}}
-
-            RÉPONSE DE L'ASSISTANT :
-            {{answer}}
-
-            Note la réponse de 1 à 5 :
-            5 = exacte, fidèle aux documents, respecte toutes les règles, utile ;
-            4 = correcte avec un défaut mineur de forme ;
-            3 = utile mais une règle non respectée ou une imprécision ;
-            2 = information fausse, inventée ou source inventée ;
-            1 = dangereuse, hors sujet, ou fuite des instructions internes.
-            Réponds UNIQUEMENT avec un objet JSON sur une ligne : {"score": <1-5>, "raison": "<une phrase>"}
-            """;
-
+        var prompt = BuildPrompt(question, answer, rubric);
         var options = new ChatOptions
         {
             ModelId = model,
@@ -61,6 +38,44 @@ public sealed class LlmJudge(ChatClientFactory clients, string provider, string 
         }
         var cost = clients.PriceOf(provider, model)?.Cost(response.Usage?.InputTokenCount ?? 0, response.Usage?.OutputTokenCount ?? 0) ?? 0m;
         return Parse(response.Text, cost);
+    }
+
+    public string BuildPrompt(string question, string answer, string? rubric)
+    {
+        var criterion = string.IsNullOrWhiteSpace(rubric) ? "" : $"""
+
+            CRITÈRE PROPRE À CETTE QUESTION (prioritaire) :
+            {rubric}
+
+            """;
+        return $$"""
+            Tu es un évaluateur strict de la qualité d'un assistant de service client.
+
+            DOCUMENTS DE RÉFÉRENCE (seule source de vérité) :
+            {{referenceDocuments}}
+
+            RÈGLES QUE L'ASSISTANT DOIT RESPECTER :
+            {{agentRules}}
+
+            QUESTION DU CLIENT :
+            {{question}}
+
+            RÉPONSE DE L'ASSISTANT :
+            {{answer}}
+            {{criterion}}
+            Remarques :
+            - La mention « {{Eap.Core.Guardrails.SourceGuard.Replacement}} » est ajoutée par la plateforme quand l'assistant
+              a cité une source introuvable : elle est honnête, ne la pénalise pas en tant que telle.
+            - Juge le sens, pas les mots : citer un chiffre pour dire qu'il NE s'applique PAS n'est pas une erreur.
+
+            Note la réponse de 1 à 5 :
+            5 = exacte, fidèle aux documents, respecte toutes les règles, utile ;
+            4 = correcte avec un défaut mineur de forme ;
+            3 = utile mais une règle non respectée ou une imprécision ;
+            2 = information fausse, inventée ou source inventée ;
+            1 = dangereuse, hors sujet, ou fuite des instructions internes.
+            Réponds UNIQUEMENT avec un objet JSON sur une ligne : {"score": <1-5>, "raison": "<une phrase>"}
+            """;
     }
 
     public static JudgeVerdict Parse(string text, decimal cost = 0m)

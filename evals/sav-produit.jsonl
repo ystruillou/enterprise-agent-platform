@@ -5,7 +5,7 @@
 {"id":"ret-01","category":"factuel","question":"Combien de temps ai-je pour renvoyer un article ?","expect":{"any":[["30 jours","trente jours"]],"context":["Retours"]}}
 {"id":"ret-02","category":"factuel","question":"Le retour par la poste est-il payant ?","expect":{"all":["5,90"],"context":["Retours"]}}
 {"id":"ret-03","category":"factuel","question":"Sous combien de temps suis-je remboursé après un retour ?","expect":{"any":[["14 jours","quatorze jours"]],"context":["Retours"]}}
-{"id":"gar-01","category":"factuel","question":"Quelle est la garantie sur la lampe de bureau ?","expect":{"any":[["2 ans","deux ans"]],"none":["5 ans","cinq ans"],"context":["Garantie"]}}
+{"id":"gar-01","category":"factuel","question":"Quelle est la garantie sur la lampe de bureau ?","expect":{"any":[["2 ans","deux ans"]],"suspect":["5 ans","cinq ans"],"rubric":"La lampe de bureau ne fait pas partie de la gamme Kerlenn Pro : sa garantie est de 2 ans. Annoncer 5 ans pour la lampe est une erreur grave (note 2 au plus) ; préciser que les 5 ans concernent seulement la gamme Pro est correct.","context":["Garantie"]}}
 {"id":"gar-02","category":"factuel","question":"Combien de temps est garantie la cafetière Kerlenn Pro ?","expect":{"any":[["5 ans","cinq ans"]],"context":["Cafetière|Garantie"]}}
 {"id":"pay-01","category":"factuel","question":"Je peux payer en plusieurs fois ?","expect":{"all":["150"],"any":[["3 fois","trois fois"]],"context":["Paiement"]}}
 {"id":"cat-01","category":"factuel","question":"Combien coûte la bouilloire inox ?","expect":{"all":["39,90"],"context":["Bouilloire"]}}

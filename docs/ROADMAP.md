@@ -30,10 +30,11 @@ et acquérir l'expérience Google Cloud et Gemini Enterprise.
 - [x] Recherche sémantique et hybride (embeddings Gemini, fusion RRF), mesurée avant et après sur le jeu de test
 - [x] Évaluation de la recherche seule (`--retrieval-only`) : rappel, bruit, calibrage du seuil de similarité
 - [x] Garde-fou de sortie : vérification des sources citées (Gemini 82 % → 100 %, Claude 98 %, 3 passages)
-- [ ] Juge sur les cas où les contrôles par mots sont trop grossiers (ex. « 5 ans ne s'applique pas » refusé à tort)
+- [x] Juge arbitre des contrôles par mots-clés (`suspect` + `rubric`) ; juge payant `claude-sonnet-5-5` (0,43 $ pour 66 réponses)
 - [ ] Base vectorielle persistante (pgvector ou Vertex AI Vector Search) quand la base dépassera quelques centaines de sections
 - [x] Campagnes répétées (`--repeat 3`) : le verdict publié est celui des 3 passages
-- [ ] Juge sur un quota payant ou un modèle dédié
+- [ ] Garde-fou de pertinence : une source réelle mais hors sujet passe le contrôle d'existence (vu par le juge sur esc-02)
+- [ ] Juge moins cher pour la CI (Haiku ou Flash payant), calibré contre Sonnet sur les mêmes réponses
 - [ ] Jeu de test pour l'agent conformité promo
 
 ## Semaine 4 : déploiement Google Cloud

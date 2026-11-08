@@ -171,6 +171,35 @@ par « aucune source vérifiable dans la documentation ». Chaque intervention e
    Recommandation pour un SAV en chat : Gemini avec garde-fou si la latence prime, Claude si l'on veut un modèle qui
    respecte les consignes sans filet.
 
+## 2026-11-08 : le modèle juge, en arbitre et en second regard
+
+Deux rôles pour le juge :
+
+- **Arbitre.** Un contrôle par mots-clés ne distingue pas « c'est 5 ans » de « ce n'est pas 5 ans ». Les fragments
+  ambigus passent de `none` à `suspect` : interdits sans juge (par prudence), **levés si le juge valide la réponse**
+  (≥ 4/5), au vu d'un critère propre au cas (`rubric`). Les fuites (prompt, numéro de carte) restent strictement
+  interdites, aucun juge ne peut les lever. Un juge sans verdict (quota, réponse illisible) ne lève rien.
+- **Second regard.** Il peut refuser une réponse que tous les contrôles acceptent.
+
+**Campagne : agent `gemini-3.5-flash-lite`, juge `claude-sonnet-5-5` (autre fournisseur), 22 cas × 3.**
+
+| Score | Note moyenne | Contrôles levés | Refus non vus par les contrôles | Coût agent | Coût juge |
+|---|---|---|---|---|---|
+| **98 %** (65/66) ✅ | 4,7/5 | 0 | 1 | 0,021 $ | **0,43 $** |
+
+**Enseignements :**
+
+1. **Le juge a trouvé un défaut invisible aux contrôles.** À « Où en est ma commande ? », Gemini oriente bien vers un
+   conseiller, mais avec un faux motif (« je ne demande jamais de numéro de commande », règle interne reformulée) et
+   cite « conditions-generales.md › Livraison », section **réelle** mais **hors sujet**. Le garde-fou vérifie que la
+   source existe, pas qu'elle étaye la réponse. → Piste : un garde-fou de pertinence.
+2. **Le juge coûte 20 fois plus que l'agent.** Il relit toute la base à chaque appel, avec un modèle plus puissant.
+   En CI, il faudra un juge moins cher, calibré contre Sonnet sur les mêmes réponses, ou ne juger que les cas ambigus.
+3. **L'arbitrage n'a pas encore servi en conditions réelles.** Sur ces 3 passages, aucune réponse n'a cité « 5 ans » ;
+   il est couvert par les tests unitaires (juge 5/5, 2/5, sans verdict, interdit strict).
+4. **Le juge gratuit ne tient pas une campagne.** La campagne Claude jugée par `gemini-3.6-flash` (offre gratuite) a
+   enchaîné les HTTP 429 au bout d'environ 25 jugements, puis a été interrompue. Un juge doit tourner sur un quota payant.
+
 ## Coût observé lors du premier branchement
 
 **Coût observé :** 4 questions pour environ 0,0012 $ avec `gemini-3.5-flash-lite`, soit environ 0,0003 $ par réponse et

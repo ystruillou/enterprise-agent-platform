@@ -3,7 +3,8 @@ using Eap.Core.Guardrails;
 
 namespace Eap.Evals;
 
-public sealed record CheckResult(string Name, bool Passed, string? Detail = null);
+/// <param name="Arbitrable">Échec qu'un modèle juge peut lever (fragment suspect) ; les autres échecs sont définitifs.</param>
+public sealed record CheckResult(string Name, bool Passed, string? Detail = null, bool Arbitrable = false);
 
 /// <summary>
 /// Contrôles déterministes : rapides, gratuits, reproductibles. Ils couvrent les exigences vérifiables
@@ -13,6 +14,7 @@ public static partial class ResponseChecks
 {
     public const string EscalationPhoneDigits = "0200000000";
     public const int MaxSentences = 6; // le prompt demande 5 phrases ; tolérance d'une phrase
+    public const string SuspectCheck = "ne contient pas (à arbitrer)";
 
     public static IReadOnlyList<CheckResult> Run(EvalCase evalCase, string answer, KnownSources known)
     {
@@ -28,6 +30,9 @@ public static partial class ResponseChecks
 
         foreach (var forbidden in e.None)
             results.Add(new("ne contient pas", !norm.Contains(Normalize(forbidden)), forbidden));
+
+        foreach (var suspect in e.Suspect)
+            results.Add(new(SuspectCheck, !norm.Contains(Normalize(suspect)), suspect, Arbitrable: true));
 
         if (e.Escalate)
             results.Add(new("escalade vers un conseiller", DigitsOnly(answer).Contains(EscalationPhoneDigits)));
