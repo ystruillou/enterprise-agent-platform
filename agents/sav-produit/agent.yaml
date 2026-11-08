@@ -20,7 +20,7 @@ model:
   provider: gemini
   name: gemini-3.5-flash-lite   # version figée (pas d'alias "latest") : traçabilité et évaluation reproductibles
   temperature: 0.2
-  max_output_tokens: 600
+  max_output_tokens: 1500   # inclut le raisonnement interne des modèles qui "réfléchissent" (Claude) : 600 tronquait
 prompt_file: system.md
 knowledge_dir: knowledge
 budget:

@@ -1,0 +1,39 @@
+name: Evaluations
+
+# Barrière de qualité : toute modification d'un agent (fiche, prompt, base de connaissances),
+# d'un jeu de test ou du cœur de la plateforme est réévaluée sur de vrais modèles.
+# Le job échoue si le score passe sous evaluation.min_score de la fiche agent.
+on:
+  pull_request:
+    paths: ["agents/**", "evals/**", "src/Eap.Core/**", "src/Eap.Evals/**"]
+  workflow_dispatch:
+    inputs:
+      agent:
+        description: "Agent à évaluer"
+        default: "sav-produit"
+
+jobs:
+  evaluate:
+    runs-on: ubuntu-latest
+    env:
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+    steps:
+      - name: Clé API absente
+        if: env.GEMINI_API_KEY == ''
+        run: echo "::notice::Secret GEMINI_API_KEY non configuré, évaluations ignorées."
+      - uses: actions/checkout@v4
+        if: env.GEMINI_API_KEY != ''
+      - uses: actions/setup-dotnet@v4
+        if: env.GEMINI_API_KEY != ''
+        with:
+          dotnet-version: 10.0.x
+      - name: Évaluer l'agent
+        if: env.GEMINI_API_KEY != ''
+        run: dotnet run --project src/Eap.Evals -c Release -- --agent "${{ inputs.agent || 'sav-produit' }}" --delay-ms 2000
+      - name: Publier le rapport
+        if: always() && env.GEMINI_API_KEY != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: rapport-evaluation
+          path: evals/reports/*.md

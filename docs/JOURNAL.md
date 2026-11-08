@@ -59,6 +59,40 @@ Mêmes 5 questions, même prompt, même base de connaissances. Seul le modèle c
 des sources font pencher vers Claude, à valider sur un jeu d'évaluation plus large (semaine 3).
 Si la latence est critique (chat en direct), Gemini garde l'avantage.
 
+## 2026-11-08 : première campagne du cadre d'évaluation
+
+22 cas (faits, escalade, pièges, hors périmètre, sécurité, transparence), contrôles déterministes, seuil de 85 %.
+
+| | `gemini-3.5-flash-lite` | `claude-haiku-5-5` |
+|---|---|---|
+| Score | **77 %** (17/22), ❌ refusé | **86 %** (19/22), ✅ validé* |
+| Échecs communs | liv-03, ret-01 | liv-03, ret-01 |
+| Sources inventées | 3 (« Consignes générales », « Instructions générales ») | 0 |
+| Latence médiane | 590 ms | 1 710 ms |
+| Coût des 22 cas | 0,0068 $ | 0,0048 $ |
+
+\* 20/22 (91 %) après correction d'un faux positif du contrôle (« fiches produits » pris pour une source inventée).
+La relance n'a pas pu se faire : crédits Anthropic épuisés (voir plus bas).
+
+**Ce que l'évaluation a appris, et qu'aucun test manuel n'aurait montré :**
+
+1. **Les deux échecs communs viennent de la recherche documentaire, pas du modèle.** « Je veux être livré demain »
+   ne trouve pas la section « Livraison » (« livré » n'est pas « livraison »), et « renvoyer un article » ne trouve pas
+   « Retours ». Le modèle répond honnêtement qu'il n'a pas l'information, faute de l'avoir reçue.
+   → Prochaine étape : une recherche sémantique (embeddings), mesurée avant et après sur ce même jeu de test.
+2. **Gemini invente une source dès qu'il n'en a pas** (refus, transparence, sécurité). Claude écrit « aucun document ».
+3. **Réponse tronquée chez Claude** : le plafond de 600 tokens de sortie inclut le raisonnement interne, et une
+   réponse a été coupée en pleine phrase. → Plafond relevé à 1 500 tokens ; les réponses tronquées sont désormais
+   détectées (`truncated` dans l'API, contrôle « réponse complète » en évaluation).
+4. **Bug de production trouvé par l'évaluation** : Gemini renvoie parfois ses erreurs dans un tableau JSON, ce qui
+   faisait planter l'extraction du code d'erreur (et donc la 502 prévue).
+5. **Il faut évaluer l'évaluateur.** Le premier contrôle des sources découpait les citations sur « et » et sur les
+   virgules, alors que les titres en contiennent (« Retours et remboursement ») : trois faux positifs pour Claude.
+   Chaque échec doit être relu avant de conclure. Un contrôle ne se corrige que s'il est faux, jamais pour faire passer un modèle.
+6. **Quotas et crédits.** Le juge `gemini-3.6-flash` a épuisé l'offre gratuite en une dizaine d'appels. Puis le solde
+   Anthropic est tombé à zéro, avec un message `invalid_request_error`, le même code qu'une requête mal formée.
+   → *FinOps* : surveiller les soldes et les quotas, et alerter avant l'épuisement.
+
 ## Coût observé lors du premier branchement
 
 **Coût observé :** 4 questions pour environ 0,0012 $ avec `gemini-3.5-flash-lite`, soit environ 0,0003 $ par réponse et

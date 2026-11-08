@@ -162,6 +162,9 @@ public class CoreTests
     [InlineData("""{"type":"error","error":{"type":"rate_limit_error","message":"user said: mon adresse est..."}}""", "rate_limit_error")]
     [InlineData("""{"error":{"status":"contient des espaces et du texte libre"}}""", null)]
     [InlineData("pas du json", null)]
+    [InlineData("""[{"error":{"code":429,"message":"quota user text","status":"RESOURCE_EXHAUSTED"}}]""", "RESOURCE_EXHAUSTED")]
+    [InlineData("[]", null)]
+    [InlineData("""["texte"]""", null)]
     public void Provider_error_code_is_extracted_without_free_text(string body, string? expected)
     {
         Assert.Equal(expected, ModelProviderException.ExtractErrorCode(body));

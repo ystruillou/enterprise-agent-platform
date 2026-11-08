@@ -22,6 +22,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\Eap.Core\Eap.Core.csproj" />
     <ProjectReference Include="..\..\src\Eap.Api\Eap.Api.csproj" />
+    <ProjectReference Include="..\..\src\Eap.Evals\Eap.Evals.csproj" />
   </ItemGroup>
 
 </Project>

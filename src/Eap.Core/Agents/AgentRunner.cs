@@ -11,7 +11,8 @@ public sealed record AgentReply(
     string Answer,
     string TraceId,
     IReadOnlyList<string> Sources,
-    UsageRecord Usage);
+    UsageRecord Usage,
+    bool Truncated = false);
 
 /// <summary>Force un fournisseur/modèle pour tous les agents (dev, CI, démo sans clé).</summary>
 public sealed record ModelOverride(string Provider, string Model);
@@ -58,7 +59,12 @@ public sealed class ModelProviderException : Exception
         try
         {
             using var doc = System.Text.Json.JsonDocument.Parse(body);
-            if (!doc.RootElement.TryGetProperty("error", out var error) || error.ValueKind != System.Text.Json.JsonValueKind.Object)
+            var root = doc.RootElement;
+            // La couche compatible OpenAI de Gemini renvoie parfois un tableau : [{"error": {...}}]
+            if (root.ValueKind == System.Text.Json.JsonValueKind.Array)
+                root = root.GetArrayLength() > 0 ? root[0] : default;
+            if (root.ValueKind != System.Text.Json.JsonValueKind.Object
+                || !root.TryGetProperty("error", out var error) || error.ValueKind != System.Text.Json.JsonValueKind.Object)
                 return null;
             foreach (var name in new[] { "status", "type", "code" }) // Google : status ; OpenAI/Anthropic : type ou code
                 if (error.TryGetProperty(name, out var v) && v.ValueKind == System.Text.Json.JsonValueKind.String
@@ -149,8 +155,13 @@ public sealed class AgentRunner(
         activity?.SetTag("eap.cost.usd", (double)cost);
         activity?.SetTag("eap.sources.count", chunks.Count);
 
+        // Réponse coupée par le plafond de tokens : sur les modèles qui raisonnent, le raisonnement interne
+        // consomme le même budget que la réponse visible (constaté avec Claude Haiku 5.5 le 2026-11-08).
+        var truncated = response.FinishReason == ChatFinishReason.Length;
+        activity?.SetTag("eap.response.truncated", truncated);
+
         var sources = chunks.Select(c => $"{c.Source} › {c.Title}").Distinct().ToList();
-        return new AgentReply(response.Text, traceId, sources, usage);
+        return new AgentReply(response.Text, traceId, sources, usage, truncated);
     }
 
     private void EnforceBudget(AgentManifest agent, string userId, DateOnly today)

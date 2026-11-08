@@ -25,6 +25,8 @@ public sealed partial class KnowledgeBase
 
     public int Count => _index.Count;
 
+    public IReadOnlyList<KnowledgeChunk> Chunks => _index.Select(e => e.Chunk).ToList();
+
     public static KnowledgeBase Empty { get; } = new();
 
     public static KnowledgeBase LoadFrom(string directory)

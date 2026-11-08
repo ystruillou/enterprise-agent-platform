@@ -21,11 +21,15 @@ et acquérir l'expérience Google Cloud et Gemini Enterprise.
 - [ ] Persistance du registre de consommation (PostgreSQL)
 - [ ] Test des 4 fournisseurs sur l'agent SAV, avec un tableau qualité / coût / latence
 
-## Semaine 3 : cadre d'évaluation
-- [ ] Jeux de test `evals/*.jsonl` (question, faits attendus, refus attendu)
-- [ ] Métriques : exactitude, ancrage dans les sources, refus hors périmètre, format
-- [ ] LLM juge et vérifications déterministes
-- [ ] Projet `Eap.Evals` et CI GitHub Actions qui **bloque** si le score passe sous `evaluation.min_score`
+## Semaine 3 : cadre d'évaluation (avancé au 2026-11-08)
+- [x] Jeu de test `evals/sav-produit.jsonl` : 22 cas en 7 catégories
+- [x] Contrôles déterministes : faits, interdits, escalade, sources réelles, longueur, réponse complète
+- [x] Modèle juge (facultatif), rapport Markdown, code de sortie selon le seuil
+- [x] Workflow `evals.yml` qui bloque une PR sous le seuil (actif dès que les secrets d'API sont configurés)
+- [x] Première campagne Gemini / Claude : voir [JOURNAL.md](JOURNAL.md)
+- [ ] Recherche sémantique (embeddings), mesurée avant et après sur le jeu de test
+- [ ] Juge sur un quota payant ou un modèle dédié ; campagnes répétées (`--repeat 3`)
+- [ ] Jeu de test pour l'agent conformité promo
 
 ## Semaine 4 : déploiement Google Cloud
 - [ ] Projet GCP, budget et alertes, comptes de service à moindre privilège

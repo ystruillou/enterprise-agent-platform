@@ -80,7 +80,7 @@ app.MapPost("/agents/{id}/chat", async (string id, ChatRequest request, HttpCont
         var reply = await runner.AskAsync(agent, userId, request.Message, ct);
         return Results.Ok(new
         {
-            reply.Answer, reply.TraceId, reply.Sources,
+            reply.Answer, reply.TraceId, reply.Sources, reply.Truncated,
             Usage = new
             {
                 reply.Usage.Provider, reply.Usage.Model, reply.Usage.ServedModel,

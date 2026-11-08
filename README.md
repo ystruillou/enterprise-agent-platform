@@ -15,19 +15,21 @@ multi-modèles (Gemini, Claude, GPT, Qwen), traçable, maîtrisée en coûts et 
 | **Gouvernance** | Chaque agent a une **fiche** versionnée (`agents/*/agent.yaml`) : finalité, responsables, statut de cycle de vie, risque AI Act, données personnelles, budget, seuil d'évaluation. Elle est validée au démarrage |
 | **Traçabilité** | OpenTelemetry (conventions `gen_ai.*`), export OTLP vers Langfuse, Cloud Trace ou Jaeger. Le contenu des prompts n'est **pas** journalisé par défaut (RGPD) |
 | **FinOps** | Coût calculé à chaque appel, agrégé par agent et par modèle, plafond quotidien par agent et quota par utilisateur |
-| **Qualité** | Jeux de test et seuils de passage en production, contrôlés en CI *(semaine 3)* |
+| **Qualité** | [Cadre d'évaluation](evals/README.md) : jeux de test, contrôles déterministes (dont la détection des **sources inventées**), modèle juge, seuil de passage en production inscrit dans la fiche et appliqué en CI |
 | **Sécurité** | Aucune clé dans le code (variables d'environnement, puis Secret Manager), validation des entrées *(IAM et IAP en semaine 4)* |
 
-## Premier résultat : Gemini et Claude sur le même agent
+## Premier résultat : évaluation de l'agent SAV sur deux modèles
 
-Agent SAV, mêmes 5 questions, seul le modèle change (détails dans [docs/JOURNAL.md](docs/JOURNAL.md)) :
+22 cas de test, seuil de passage en production à 85 % (détails et enseignements dans [docs/JOURNAL.md](docs/JOURNAL.md)) :
 
 | | `gemini-3.5-flash-lite` | `claude-haiku-5-5` |
 |---|---|---|
-| Faits exacts | 5/5 | 5/5 |
-| Sources inventées | 2/5 | 0/5 |
-| Latence | ~0,8 s | ~2 s |
-| Coût des 5 réponses | 0,00168 $ | 0,00130 $ |
+| Score | 77 %, ❌ refusé | 86 %, ✅ validé |
+| Sources inventées | 3 | 0 |
+| Latence médiane | 0,6 s | 1,7 s |
+| Coût des 22 cas | 0,0068 $ | 0,0048 $ |
+
+Les deux échecs communs viennent de la recherche documentaire, pas des modèles : c'est la prochaine amélioration, mesurée sur le même jeu de test.
 
 ## Architecture
 
@@ -54,7 +56,7 @@ Agent SAV, mêmes 5 questions, seul le modèle change (détails dans [docs/JOURN
 Prérequis : SDK .NET 10.
 
 ```bash
-dotnet test                          # 22 tests, aucun appel payant
+dotnet test                          # 51 tests, aucun appel payant
 dotnet run --project src/Eap.Api     # http://localhost:5xxx
 ```
 

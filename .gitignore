@@ -480,3 +480,6 @@ $RECYCLE.BIN/
 
 # Vim temporary swap files
 *.swp
+
+# Rapports d evaluation generes localement (resultats resumes dans docs/JOURNAL.md)
+evals/reports/

@@ -2,6 +2,7 @@
   <Folder Name="/src/">
     <Project Path="src/Eap.Api/Eap.Api.csproj" />
     <Project Path="src/Eap.Core/Eap.Core.csproj" />
+    <Project Path="src/Eap.Evals/Eap.Evals.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Eap.Tests/Eap.Tests.csproj" />
