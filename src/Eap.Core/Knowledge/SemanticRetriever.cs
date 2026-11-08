@@ -36,6 +36,8 @@ public sealed class SemanticRetriever(
         ? throw new ArgumentException("SemanticRetriever gère les modes Semantic et Hybrid ; utilisez KnowledgeBase pour Keyword.")
         : mode;
 
+    public IReadOnlyList<KnowledgeChunk> Corpus => knowledge.Chunks;
+
     public async Task<RetrievalResult> SearchAsync(string query, CancellationToken ct = default)
     {
         if (knowledge.Count == 0 || string.IsNullOrWhiteSpace(query))

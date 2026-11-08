@@ -1,6 +1,7 @@
 using System.Globalization;
 using Eap.Core.Agents;
 using Eap.Core.FinOps;
+using Eap.Core.Guardrails;
 using Eap.Core.Knowledge;
 using Eap.Core.Models;
 using Eap.Evals;
@@ -11,6 +12,7 @@ using Microsoft.Extensions.Configuration;
 //        [--provider anthropic --model claude-haiku-5-5]   force un modèle (sinon celui de la fiche)
 //        [--judge gemini:gemini-3.6-flash]                  ajoute un modèle juge
 //        [--retrieval keyword|semantic|hybrid]             force la stratégie de recherche (sinon celle de la fiche)
+//        [--no-guardrails]                                  désactive les garde-fous de sortie (mesure du modèle brut)
 //        [--retrieval-only]                                 mesure la recherche seule, sans appeler le modèle de chat
 //        [--repeat 2] [--delay-ms 1000] [--no-gate] [--report-dir evals/reports]
 CultureInfo.CurrentCulture = CultureInfo.InvariantCulture;
@@ -29,6 +31,7 @@ var agent = AgentRegistry.LoadFrom(Path.Combine(root, "agents")).Find(opt.Agent)
 if (string.IsNullOrWhiteSpace(agent.Evaluation.Dataset))
     throw new InvalidOperationException($"La fiche de {agent.Id} ne déclare pas de jeu d'évaluation.");
 
+if (opt.NoGuardrails) agent.Guardrails.VerifySources = false;
 var cases = EvalCase.LoadJsonl(Path.GetFullPath(Path.Combine(agent.BaseDirectory, agent.Evaluation.Dataset)));
 var kb = agent.KnowledgeDir is { Length: > 0 } dir ? KnowledgeBase.LoadFrom(Path.Combine(agent.BaseDirectory, dir)) : KnowledgeBase.Empty;
 var known = new KnownSources(kb.Chunks.Select(c => c.Source), kb.Chunks.Select(c => c.Title));
@@ -53,7 +56,8 @@ if (opt.Judge is { } j)
 
 var provider = modelOverride?.Provider ?? agent.Model.Provider;
 var model = modelOverride?.Model ?? agent.Model.Name;
-Console.WriteLine($"Évaluation de {agent.Id} v{agent.Version} sur {provider}/{model}, recherche {retrievalMode} : {cases.Count} cas × {opt.Repeat}" +
+Console.WriteLine($"Évaluation de {agent.Id} v{agent.Version} sur {provider}/{model}, recherche {retrievalMode}, " +
+                  $"garde-fous {(agent.Guardrails.VerifySources ? "actifs" : "désactivés")} : {cases.Count} cas × {opt.Repeat}" +
                   (judge is null ? "" : $", juge {judge.Label}"));
 
 var results = new List<CaseResult>();
@@ -74,7 +78,8 @@ for (var run = 1; run <= opt.Repeat; run++)
             catch (ModelProviderException ex) { verdict = new JudgeVerdict(null, $"juge indisponible (HTTP {ex.HttpStatus})", 0m); }
         }
         var contextFound = evalCase.Expect.ContextFound(reply.Sources.Select(s => s.Split(" › ", 2)[^1]));
-        result = new CaseResult(evalCase, run, reply.Answer, checks, verdict, reply.Usage, null, contextFound);
+        result = new CaseResult(evalCase, run, reply.Answer, checks, verdict, reply.Usage, null, contextFound,
+            reply.Guardrails?.Count ?? 0, reply.ModelAnswer);
     }
     catch (Exception ex) when (ex is ModelProviderException or QuotaExceededException)
     {
@@ -83,16 +88,19 @@ for (var run = 1; run <= opt.Repeat; run++)
     results.Add(result);
     Console.WriteLine($"  {(result.Passed ? "OK  " : "ÉCHEC")} {evalCase.Id,-8} {evalCase.Category,-15} " +
                       (result.ContextFound == false ? "[contexte manquant] " : "") +
+                      (result.GuardrailActions > 0 ? "[garde-fou] " : "") +
                       (result.Passed ? "" : string.Join(" ; ", result.FailureReasons)));
     if (opt.DelayMs > 0) await Task.Delay(opt.DelayMs);
 }
 
-var summary = EvalSummary.From(agent, provider, model, judge?.Label, retrievalMode.ToString().ToLowerInvariant(), results);
+var summary = EvalSummary.From(agent, provider, model, judge?.Label,
+    retrievalMode.ToString().ToLowerInvariant() + (agent.Guardrails.VerifySources ? "" : "_sans-garde-fou"), results);
 var reportPath = ReportWriter.Write(Path.Combine(root, opt.ReportDir), summary);
 
 Console.WriteLine();
 Console.WriteLine($"Score : {summary.Score:P0} ({summary.Passed}/{summary.Total})  seuil : {agent.Evaluation.MinScore:P0}  →  " +
                   (summary.MeetsThreshold ? "VALIDÉ" : "REFUSÉ"));
+Console.WriteLine($"Garde-fou : {summary.GuardrailInterventions} réponse(s) corrigée(s) (sources inventées par le modèle)");
 Console.WriteLine($"Recherche : sections attendues retrouvées {summary.ContextRecall.Found}/{summary.ContextRecall.Labeled}");
 Console.WriteLine($"Coût : agent {summary.AgentCostUsd:0.######} $, juge {summary.JudgeCostUsd:0.######} $ · latence médiane {summary.MedianLatencyMs:0} ms");
 Console.WriteLine($"Rapport : {Path.GetRelativePath(root, reportPath)}");
@@ -123,7 +131,7 @@ static string FindRepoRoot()
 }
 
 internal sealed record EvalOptions(string Agent, string? Provider, string? Model, string? Judge, int Repeat, int DelayMs, bool NoGate, string ReportDir,
-    RetrievalMode? Retrieval, bool RetrievalOnly)
+    RetrievalMode? Retrieval, bool RetrievalOnly, bool NoGuardrails)
 {
     public static EvalOptions Parse(string[] args)
     {
@@ -136,6 +144,7 @@ internal sealed record EvalOptions(string Agent, string? Provider, string? Model
             args.Contains("--no-gate"),
             Get("--report-dir") ?? Path.Combine("evals", "reports"),
             Get("--retrieval") is { } m ? Enum.Parse<RetrievalMode>(m, ignoreCase: true) : null,
-            args.Contains("--retrieval-only"));
+            args.Contains("--retrieval-only"),
+            args.Contains("--no-guardrails"));
     }
 }

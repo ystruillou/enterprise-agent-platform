@@ -19,6 +19,9 @@ public sealed record RetrievalResult(IReadOnlyList<RetrievalHit> Hits, Retrieval
 public interface IKnowledgeRetriever
 {
     Task<RetrievalResult> SearchAsync(string query, CancellationToken ct = default);
+
+    /// <summary>Toutes les sections de la base : sert au garde-fou qui vérifie les sources citées.</summary>
+    IReadOnlyList<KnowledgeChunk> Corpus { get; }
 }
 
 public enum RetrievalMode

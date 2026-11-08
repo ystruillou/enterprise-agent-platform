@@ -17,6 +17,7 @@ public sealed class AgentManifest
     public string PromptFile { get; set; } = "system.md";
     public string? KnowledgeDir { get; set; }
     public AgentRetrieval Retrieval { get; set; } = new();
+    public AgentGuardrails Guardrails { get; set; } = new();
     public AgentBudget Budget { get; set; } = new();
     public AgentEvaluation Evaluation { get; set; } = new();
 
@@ -55,6 +56,13 @@ public sealed class AgentModel
     public string Name { get; set; } = "fake-model";
     public float Temperature { get; set; } = 0.2f;
     public int MaxOutputTokens { get; set; } = 800;
+}
+
+/// <summary>Garde-fous appliqués à la réponse du modèle avant de la renvoyer.</summary>
+public sealed class AgentGuardrails
+{
+    /// <summary>Remplace toute source citée qui n'existe pas dans la base de connaissances (activé par défaut).</summary>
+    public bool VerifySources { get; set; } = true;
 }
 
 /// <summary>Stratégie de recherche documentaire (RAG) de l'agent.</summary>

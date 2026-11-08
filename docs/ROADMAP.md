@@ -29,9 +29,11 @@ et acquérir l'expérience Google Cloud et Gemini Enterprise.
 - [x] Première campagne Gemini / Claude : voir [JOURNAL.md](JOURNAL.md)
 - [x] Recherche sémantique et hybride (embeddings Gemini, fusion RRF), mesurée avant et après sur le jeu de test
 - [x] Évaluation de la recherche seule (`--retrieval-only`) : rappel, bruit, calibrage du seuil de similarité
-- [ ] Garde-fou de sortie : vérifier la ligne « Source : » avant de répondre (les sources inventées sont le défaut restant de Gemini)
+- [x] Garde-fou de sortie : vérification des sources citées (Gemini 82 % → 100 %, Claude 98 %, 3 passages)
+- [ ] Juge sur les cas où les contrôles par mots sont trop grossiers (ex. « 5 ans ne s'applique pas » refusé à tort)
 - [ ] Base vectorielle persistante (pgvector ou Vertex AI Vector Search) quand la base dépassera quelques centaines de sections
-- [ ] Juge sur un quota payant ou un modèle dédié ; campagnes répétées (`--repeat 3`)
+- [x] Campagnes répétées (`--repeat 3`) : le verdict publié est celui des 3 passages
+- [ ] Juge sur un quota payant ou un modèle dédié
 - [ ] Jeu de test pour l'agent conformité promo
 
 ## Semaine 4 : déploiement Google Cloud

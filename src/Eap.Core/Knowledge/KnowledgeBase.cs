@@ -27,6 +27,8 @@ public sealed partial class KnowledgeBase : IKnowledgeRetriever
 
     public IReadOnlyList<KnowledgeChunk> Chunks => _index.Select(e => e.Chunk).ToList();
 
+    public IReadOnlyList<KnowledgeChunk> Corpus => Chunks;
+
     public static KnowledgeBase Empty { get; } = new();
 
     public static KnowledgeBase LoadFrom(string directory)

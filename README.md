@@ -16,6 +16,7 @@ multi-modèles (Gemini, Claude, GPT, Qwen), traçable, maîtrisée en coûts et 
 | **Traçabilité** | OpenTelemetry (conventions `gen_ai.*`), export OTLP vers Langfuse, Cloud Trace ou Jaeger. Le contenu des prompts n'est **pas** journalisé par défaut (RGPD) |
 | **FinOps** | Coût calculé à chaque appel, agrégé par agent et par modèle, plafond quotidien par agent et quota par utilisateur |
 | **RAG** | Recherche par mots-clés, sémantique ou hybride (fusion RRF), choisie dans la fiche ; seuil de similarité calibré ; repli automatique sur les mots-clés si les embeddings sont indisponibles |
+| **Garde-fous** | Vérification des sources citées avant de répondre : une source absente de la base est remplacée, l'intervention est tracée |
 | **Qualité** | [Cadre d'évaluation](evals/README.md) : jeux de test, contrôles déterministes (dont la détection des **sources inventées**), modèle juge, seuil de passage en production inscrit dans la fiche et appliqué en CI |
 | **Sécurité** | Aucune clé dans le code (variables d'environnement, puis Secret Manager), validation des entrées *(IAM et IAP en semaine 4)* |
 
@@ -32,16 +33,16 @@ multi-modèles (Gemini, Claude, GPT, Qwen), traçable, maîtrisée en coûts et 
 | Latence médiane | 0,6 s | 1,7 s |
 | Coût des 22 cas | 0,0068 $ | 0,0048 $ |
 
-**Amélioration de la recherche** (Gemini, même prompt, mêmes cas) :
+**Amélioration mesurée étape par étape** (Gemini, même prompt, mêmes cas, 3 passages sauf mention) :
 
-| | Mots-clés | Hybride (embeddings + mots-clés), 3 passages |
-|---|---|---|
-| Sections attendues retrouvées | 13/16 | 16/16 |
-| Réponses factuelles justes | 14/16 | 48/48 |
-| Score | 77 % ❌ | 82 % ❌ |
+| Étape | Réponses factuelles justes | Sources inventées visibles | Score |
+|---|---|---|---|
+| Recherche par mots-clés (1 passage) | 14/16 | 3 | 77 % ❌ |
+| + recherche hybride (embeddings + mots-clés) | 48/48 | 12 | 82 % ❌ |
+| + garde-fou de sortie sur les sources | 48/48 | 0 (9 corrigées) | **100 %** ✅ |
 
-La recherche ne cause plus aucun échec. Ceux qui restent sont des sources inventées par Gemini sur des questions
-sans réponse documentaire : prochaine étape, un garde-fou de sortie.
+**Comparaison finale** (recherche hybride + garde-fou, 3 passages) : Gemini 100 %, 0,6 s ; Claude Haiku 98 %, 2,0 s,
+et seulement 2 interventions du garde-fou, inoffensives, contre 9 vraies inventions corrigées chez Gemini.
 
 ## Architecture
 
@@ -50,7 +51,7 @@ sans réponse documentaire : prochaine étape, un garde-fou de sortie.
  Client ──▶ │ /agents (registre)   /agents/{id}/chat   /finops/usage   /health │
             └──────────┬───────────────────────────────────────────────────────┘
                        ▼
-            AgentRunner : garde-fous FinOps → recherche hybride (RAG) → appel modèle → registre de consommation
+            AgentRunner : garde-fous FinOps → recherche hybride (RAG) → appel modèle → garde-fous → registre de consommation
                        │                                         │
                        ▼                                         ▼
             ChatClientFactory ── IChatClient instrumenté ──▶ Gemini · Claude · GPT · Qwen · fake
@@ -68,7 +69,7 @@ sans réponse documentaire : prochaine étape, un garde-fou de sortie.
 Prérequis : SDK .NET 10.
 
 ```bash
-dotnet test                          # 60 tests, aucun appel payant
+dotnet test                          # 68 tests, aucun appel payant
 dotnet run --project src/Eap.Api     # http://localhost:5xxx
 ```
 

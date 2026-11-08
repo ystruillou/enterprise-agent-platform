@@ -1,7 +1,7 @@
 # Fiche agent — alimente le registre des agents (cf. governance/)
 id: sav-produit
 name: Assistant SAV produit
-version: 0.2.0          # 0.2.0 : recherche hybride (embeddings) au lieu des mots-clés
+version: 0.3.0          # 0.2.0 : recherche hybride ; 0.3.0 : garde-fou des sources
 status: pilot              # idea | design | pilot | production | retired
 purpose: >
   Répondre aux questions des clients de l'enseigne (fictive) Maison Kerlenn sur les produits,
@@ -32,6 +32,8 @@ retrieval:
   dimensions: 768
   top: 3
   min_similarity: 0.50     # questions documentées >= 0,55 ; « recette de crêpes » 0,48, « je parle à un humain ? » 0,47
+guardrails:
+  verify_sources: true     # toute source citée absente de la base est remplacée (Gemini en inventait 1 fois sur 5)
 budget:
   daily_usd: 2.0
   max_requests_per_user_per_day: 30

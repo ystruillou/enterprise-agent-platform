@@ -44,6 +44,19 @@ dotnet run --project src/Eap.Evals -- --agent sav-produit --retrieval-only --ret
 dotnet run --project src/Eap.Evals -- --agent sav-produit --retrieval-only --retrieval hybrid
 ```
 
+## Garde-fous et modèle brut
+
+La plateforme applique des **garde-fous de sortie** avant de répondre : une source citée qui n'existe pas dans la base
+est remplacée par « aucune source vérifiable » (`guardrails.verify_sources` dans la fiche, activé par défaut).
+Le score mesure donc **ce que voit l'utilisateur**. Pour ne pas masquer le comportement du modèle, le rapport compte les
+réponses corrigées par le garde-fou, et `--no-guardrails` mesure le modèle brut :
+
+```powershell
+dotnet run --project src/Eap.Evals -- --agent sav-produit --no-guardrails
+```
+
+Un garde-fou qui intervient souvent est un signal : le modèle ou le prompt est à revoir, même si le score est bon.
+
 ## Catégories de cas
 
 `factuel`, `multi` (plusieurs questions en une), `escalade`, `piege` (produit inexistant), `hors_perimetre`,

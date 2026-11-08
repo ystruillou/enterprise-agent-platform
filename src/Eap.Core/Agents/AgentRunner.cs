@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Text;
 using Eap.Core.FinOps;
+using Eap.Core.Guardrails;
 using Eap.Core.Knowledge;
 using Eap.Core.Models;
 using Microsoft.Extensions.AI;
@@ -12,7 +13,11 @@ public sealed record AgentReply(
     string TraceId,
     IReadOnlyList<string> Sources,
     UsageRecord Usage,
-    bool Truncated = false);
+    bool Truncated = false,
+    IReadOnlyList<GuardrailAction>? Guardrails = null,
+    string? ModelAnswer = null);
+// ModelAnswer : réponse du modèle AVANT garde-fous, renseignée seulement s'ils l'ont modifiée.
+// Sert à l'évaluation (vérifier que le garde-fou ne corrige pas à tort) ; l'API ne l'expose pas.
 
 /// <summary>Force un fournisseur/modèle pour tous les agents (dev, CI, démo sans clé).</summary>
 public sealed record ModelOverride(string Provider, string Model);
@@ -89,6 +94,7 @@ public sealed class AgentRunner(
 {
     public static readonly ActivitySource Activity = new("Eap.Agents");
     private readonly TimeProvider _time = time ?? TimeProvider.System;
+    private readonly System.Runtime.CompilerServices.ConditionalWeakTable<IKnowledgeRetriever, KnownSources> _knownSources = new();
 
     public async Task<AgentReply> AskAsync(AgentManifest agent, string userId, string question, CancellationToken ct = default)
     {
@@ -104,7 +110,8 @@ public sealed class AgentRunner(
         activity?.SetTag("eap.agent.status", agent.Status.ToString());
         activity?.SetTag("eap.user.id", userId);
 
-        var retrieval = await knowledgeFor(agent).SearchAsync(question, ct);
+        var retriever = knowledgeFor(agent);
+        var retrieval = await retriever.SearchAsync(question, ct);
         var chunks = retrieval.Chunks;
         activity?.SetTag("eap.retrieval.mode", retrieval.Mode.ToString());
         activity?.SetTag("eap.retrieval.degraded", retrieval.Degraded);
@@ -163,8 +170,23 @@ public sealed class AgentRunner(
         var truncated = response.FinishReason == ChatFinishReason.Length;
         activity?.SetTag("eap.response.truncated", truncated);
 
+        // Garde-fous de sortie : appliqués après facturation (l'appel a bien été consommé), avant de répondre.
+        var answer = response.Text;
+        var actions = new List<GuardrailAction>();
+        if (agent.Guardrails.VerifySources && retriever.Corpus.Count > 0)
+        {
+            var (guarded, action) = SourceGuard.Apply(answer, _knownSources.GetOrAdd(retriever, r =>
+                new KnownSources(r.Corpus.Select(c => c.Source), r.Corpus.Select(c => c.Title))));
+            answer = guarded;
+            if (action is not null) actions.Add(action);
+        }
+        activity?.SetTag("eap.guardrail.actions", actions.Count);
+        foreach (var a in actions)
+            activity?.AddEvent(new ActivityEvent("eap.guardrail", tags: new ActivityTagsCollection { ["rule"] = a.Rule }));
+
         var sources = chunks.Select(c => $"{c.Source} › {c.Title}").Distinct().ToList();
-        return new AgentReply(response.Text, traceId, sources, usage, truncated);
+        return new AgentReply(answer, traceId, sources, usage, truncated, actions,
+            ModelAnswer: actions.Count > 0 ? response.Text : null);
     }
 
     private void EnforceBudget(AgentManifest agent, string userId, DateOnly today)

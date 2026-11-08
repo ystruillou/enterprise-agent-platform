@@ -6,7 +6,8 @@ namespace Eap.Evals;
 
 public sealed record CaseResult(
     EvalCase Case, int Run, string Answer, IReadOnlyList<CheckResult> Checks,
-    JudgeVerdict? Judge, UsageRecord? Usage, string? Error, bool? ContextFound = null)
+    JudgeVerdict? Judge, UsageRecord? Usage, string? Error, bool? ContextFound = null, int GuardrailActions = 0,
+    string? ModelAnswer = null)
 {
     /// <summary>Un cas réussit si tous les contrôles passent et, si un juge est utilisé, s'il donne au moins 4/5.</summary>
     public bool Passed => Error is null && Checks.All(c => c.Passed) && (Judge?.Score is null || Judge.Score >= LlmJudge.PassScore);
@@ -22,6 +23,9 @@ public sealed record EvalSummary(
     string Retrieval, IReadOnlyList<CaseResult> Results, DateTimeOffset At)
 {
     /// <summary>Cas dont la recherche a retrouvé les sections attendues, parmi ceux qui en déclarent.</summary>
+    /// <summary>Réponses corrigées par un garde-fou : le score mesure ce que voit l'utilisateur, ce compteur montre le modèle brut.</summary>
+    public int GuardrailInterventions => Results.Count(r => r.GuardrailActions > 0);
+
     public (int Found, int Labeled) ContextRecall =>
         (Results.Count(r => r.ContextFound == true), Results.Count(r => r.ContextFound is not null));
     public int Total => Results.Count;
@@ -62,6 +66,7 @@ public static class ReportWriter
         sb.AppendLine($"| Date | {s.At:yyyy-MM-dd HH:mm} |");
         sb.AppendLine($"| Modèle | `{s.Provider}/{s.Model}`{(s.ServedModel is { } sm && sm != s.Model ? $" (servi : `{sm}`)" : "")} |");
         sb.AppendLine($"| Recherche documentaire | {s.Retrieval} · sections attendues retrouvées : {s.ContextRecall.Found}/{s.ContextRecall.Labeled} |");
+        sb.AppendLine($"| Garde-fou des sources | {(s.Agent.Guardrails.VerifySources ? $"actif · {s.GuardrailInterventions} réponse(s) corrigée(s)" : "désactivé (modèle brut)")} |");
         sb.AppendLine($"| Juge | {(s.JudgeLabel is null ? "aucun (contrôles déterministes seuls)" : $"`{s.JudgeLabel}`")} |");
         sb.AppendLine($"| **Score** | **{s.Score:P0}** ({s.Passed}/{s.Total}) |");
         sb.AppendLine($"| Seuil de passage en production | {s.Agent.Evaluation.MinScore:P0} |");
@@ -86,6 +91,17 @@ public static class ReportWriter
             foreach (var reason in f.FailureReasons) sb.AppendLine($"- ❌ {reason}");
             sb.AppendLine().AppendLine("<details><summary>Réponse</summary>").AppendLine();
             sb.AppendLine("```text").AppendLine(f.Answer.Trim()).AppendLine("```").AppendLine("</details>").AppendLine();
+        }
+
+        var guarded = s.Results.Where(r => r.GuardrailActions > 0).ToList();
+        if (guarded.Count > 0)
+        {
+            // Relire ces citations : une source réelle remplacée à tort serait un faux positif du garde-fou.
+            sb.AppendLine($"## Interventions du garde-fou ({guarded.Count})").AppendLine();
+            sb.AppendLine("| Cas | Citation d'origine du modèle (remplacée) |").AppendLine("|---|---|");
+            foreach (var r in guarded)
+                sb.AppendLine($"| {r.Case.Id}{(r.Run > 1 ? $" (essai {r.Run})" : "")} | {(r.ModelAnswer is { } m ? Eap.Core.Guardrails.SourceLine.Extract(m) : null)?.Replace("|", "/") ?? "?"} |");
+            sb.AppendLine();
         }
 
         sb.AppendLine("## Détail des cas").AppendLine();

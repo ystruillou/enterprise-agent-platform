@@ -133,6 +133,44 @@ Même agent, même modèle (`gemini-3.5-flash-lite`), même prompt, mêmes 22 ca
    de revectoriser une question déjà vue (fréquent sur une FAQ). La latence de Gemini a aussi varié de 0,7 s à 5,4 s de médiane
    selon l'heure : une comparaison de latences ne vaut qu'entre mesures faites au même moment.
 
+## 2026-11-08 : garde-fou de sortie, puis Gemini et Claude à armes égales
+
+Le défaut restant (sources inventées) ne relève plus de la recherche : il est traité par le code, pas par le prompt.
+Avant de répondre, la plateforme vérifie la ligne « Source : » contre la base ; une citation invérifiable est remplacée
+par « aucune source vérifiable dans la documentation ». Chaque intervention est tracée (`eap.guardrail.actions`).
+
+**Campagne finale : 22 cas × 3 passages, recherche hybride, garde-fou actif, mêmes conditions pour les deux modèles.**
+
+| | `gemini-3.5-flash-lite` | `claude-haiku-5-5` |
+|---|---|---|
+| Score | **100 %** (66/66) ✅ | **98 %** (65/66) ✅ |
+| Réponses corrigées par le garde-fou | 9 (sources inventées) | 2 (faux positifs inoffensifs, voir plus bas) |
+| Latence médiane | 0,6 s | 2,0 s |
+| Coût des 66 réponses | 0,021 $ | 0,017 $ |
+
+**Enseignements :**
+
+1. **Un garde-fou déterministe vaut mieux qu'une consigne répétée dans le prompt.** Gemini invente une source dans
+   14 % des réponses ; le prompt l'interdisait déjà. Le code le garantit, et le compteur d'interventions garde le
+   défaut visible : le score mesure ce que voit l'utilisateur, le compteur mesure le modèle.
+2. **Le garde-fou avait une faille, trouvée en relisant un échec de Claude.** Claude écrivait parfois « Source : … »
+   à la fin de sa dernière phrase, pas sur une ligne à part : une source inventée écrite ainsi serait passée.
+   → Détection étendue, et tests dédiés. Un second bug avait été trouvé par les tests unitaires : l'expression régulière
+   avalait la ligne vide avant la source.
+3. **Il faut pouvoir relire ce que le garde-fou a remplacé.** Le rapport d'évaluation montre maintenant la citation
+   d'origine (l'API, elle, ne l'expose pas). Résultat : les 9 interventions sur Gemini sont de vraies inventions
+   (« Instructions générales », « Consignes service client ») ; les 2 sur Claude sont des **faux positifs** :
+   « catalogue.md (produit non trouvé) », une citation honnête annotée. Conséquence inoffensive (la mention de
+   remplacement est vraie aussi), donc pas de règle ad hoc ajoutée pour l'instant.
+4. **L'échec restant de Claude est une limite du contrôle, pas du modèle.** Sur la lampe, Claude répond « 2 ans […] la
+   garantie de 5 ans au total ne s'applique pas à ce modèle » : réponse juste, mais le contrôle « ne contient pas 5 ans »
+   la refuse. Je ne modifie pas le cas pour faire passer le modèle : c'est précisément le rôle du modèle juge, à activer
+   sur un quota adapté.
+5. **Avec les mêmes outils, le choix de modèle change de nature.** Les deux passent le seuil ; Gemini est 3 fois plus
+   rapide, Claude un peu moins cher et beaucoup plus fiable sur les sources (2 corrections inoffensives contre 9 réelles).
+   Recommandation pour un SAV en chat : Gemini avec garde-fou si la latence prime, Claude si l'on veut un modèle qui
+   respecte les consignes sans filet.
+
 ## Coût observé lors du premier branchement
 
 **Coût observé :** 4 questions pour environ 0,0012 $ avec `gemini-3.5-flash-lite`, soit environ 0,0003 $ par réponse et
