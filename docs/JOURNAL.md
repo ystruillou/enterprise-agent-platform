@@ -200,6 +200,28 @@ Deux rôles pour le juge :
 4. **Le juge gratuit ne tient pas une campagne.** La campagne Claude jugée par `gemini-3.6-flash` (offre gratuite) a
    enchaîné les HTTP 429 au bout d'environ 25 jugements, puis a été interrompue. Un juge doit tourner sur un quota payant.
 
+**Même juge pour Claude : agent `claude-haiku-5-5`, juge `claude-sonnet-5-5`, 22 cas × 3.**
+
+| | `gemini-3.5-flash-lite` | `claude-haiku-5-5` |
+|---|---|---|
+| Score avec juge | **98 %** (65/66) ✅ | **95 %** (63/66) ✅ |
+| Score sans juge (campagne précédente) | 100 % | 98 % |
+| Note moyenne du juge | 4,7/5 | 4,8/5 |
+| Refus du juge non vus par les contrôles | 1 | 2 |
+| Corrections du garde-fou | 10 | 2 |
+| Latence médiane | 0,6 s | 1,8 s |
+| Coût agent / juge | 0,021 $ / 0,43 $ | 0,016 $ / 0,43 $ |
+
+5. **Les refus du juge sur Claude sont fondés : ce sont des extrapolations.** « Au-delà de 13 h, le délai est de 3 à 5 jours »
+   et « le paiement en plusieurs fois n'est pas proposé pour les autres montants » : plausibles, mais absents des documents.
+   Gemini invente des sources ; Claude, quand il en dit plus que la base, invente des règles. Seul le juge voit ce second défaut.
+6. **Pas d'auto-préférence visible.** Sonnet a été plus sévère avec Claude (2 refus) qu'avec Gemini (1 refus). Un seul
+   échantillon ne le prouve pas : la bonne pratique reste un juge d'un autre fournisseur, quand le quota le permet.
+7. **Nouveau faux négatif d'un contrôle par mots-clés (esc-03).** Pour le grille-pain inexistant, Claude n'invente pas de prix,
+   renvoie vers un conseiller, puis propose des produits existants **avec leur vrai prix**. Le contrôle « ne contient pas € »
+   le refuse ; le juge donne 5/5. Même famille que la lampe : candidat à passer en `suspect`, avec un critère
+   (« aucun prix pour le grille-pain »). Le cas n'est pas modifié dans cette campagne : le score publié reste 95 %.
+
 ## Coût observé lors du premier branchement
 
 **Coût observé :** 4 questions pour environ 0,0012 $ avec `gemini-3.5-flash-lite`, soit environ 0,0003 $ par réponse et
