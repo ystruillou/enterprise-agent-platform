@@ -19,17 +19,55 @@ public sealed record ModelOverride(string Provider, string Model);
 public sealed class QuotaExceededException(string message) : Exception(message);
 
 /// <summary>Échec côté fournisseur de modèle (clé invalide, modèle retiré, indisponibilité…).</summary>
-public sealed class ModelProviderException(string provider, string model, Exception inner)
-    : Exception($"Le fournisseur {provider} a échoué pour le modèle {model} : {inner.Message} {ResponseBody(inner)}", inner)
+public sealed class ModelProviderException : Exception
 {
-    public string Provider { get; } = provider;
-    public string Model { get; } = model;
+    public string Provider { get; }
+    public string Model { get; }
+    /// <summary>Code HTTP renvoyé par le fournisseur (0 si l'échec n'est pas une réponse HTTP).</summary>
+    public int HttpStatus { get; }
+    /// <summary>Code d'erreur du fournisseur (ex. PERMISSION_DENIED, rate_limit_error), filtré.</summary>
+    public string? ProviderErrorCode { get; }
 
-    /// <summary>Corps de la réponse HTTP d'erreur du fournisseur, pour le diagnostic (journaux uniquement).</summary>
-    private static string ResponseBody(Exception ex) =>
-        ex is System.ClientModel.ClientResultException cre && cre.GetRawResponse() is { } raw
-            ? raw.Content.ToString() is { Length: > 0 } body ? body[..Math.Min(body.Length, 1000)] : ""
-            : "";
+    public ModelProviderException(string provider, string model, Exception inner)
+        : base(BuildMessage(provider, model, inner, out var status, out var code), inner)
+    {
+        Provider = provider;
+        Model = model;
+        HttpStatus = status;
+        ProviderErrorCode = code;
+    }
+
+    // Le corps de la réponse n'est jamais repris tel quel : il peut contenir des extraits de la requête,
+    // donc des données utilisateur. On n'en extrait qu'un code d'erreur court, aux caractères filtrés.
+    private static string BuildMessage(string provider, string model, Exception inner, out int status, out string? code)
+    {
+        status = 0;
+        code = null;
+        if (inner is System.ClientModel.ClientResultException cre)
+        {
+            status = cre.Status;
+            code = ExtractErrorCode(cre.GetRawResponse()?.Content?.ToString());
+        }
+        var detail = status > 0 ? $"HTTP {status}{(code is null ? "" : $" ({code})")}" : inner.GetType().Name;
+        return $"Le fournisseur {provider} a échoué pour le modèle {model} : {detail}";
+    }
+
+    public static string? ExtractErrorCode(string? body)
+    {
+        if (string.IsNullOrWhiteSpace(body)) return null;
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(body);
+            if (!doc.RootElement.TryGetProperty("error", out var error) || error.ValueKind != System.Text.Json.JsonValueKind.Object)
+                return null;
+            foreach (var name in new[] { "status", "type", "code" }) // Google : status ; OpenAI/Anthropic : type ou code
+                if (error.TryGetProperty(name, out var v) && v.ValueKind == System.Text.Json.JsonValueKind.String
+                    && v.GetString() is { Length: > 0 and <= 64 } s && s.All(c => char.IsAsciiLetterOrDigit(c) || c is '_' or '-' or '.'))
+                    return s;
+        }
+        catch (System.Text.Json.JsonException) { }
+        return null;
+    }
 }
 
 /// <summary>

@@ -140,6 +140,16 @@ public class CoreTests
         Assert.Empty(ledger.Summarize(DateOnly.FromDateTime(DateTime.UtcNow)));
     }
 
+    [Theory]
+    [InlineData("""{"error":{"code":403,"message":"secret prompt text","status":"PERMISSION_DENIED"}}""", "PERMISSION_DENIED")]
+    [InlineData("""{"type":"error","error":{"type":"rate_limit_error","message":"user said: mon adresse est..."}}""", "rate_limit_error")]
+    [InlineData("""{"error":{"status":"contient des espaces et du texte libre"}}""", null)]
+    [InlineData("pas du json", null)]
+    public void Provider_error_code_is_extracted_without_free_text(string body, string? expected)
+    {
+        Assert.Equal(expected, ModelProviderException.ExtractErrorCode(body));
+    }
+
     [Fact]
     public async Task Runner_refuses_retired_agent()
     {

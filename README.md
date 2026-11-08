@@ -43,7 +43,7 @@ multi-modèles (Gemini, Claude, GPT, Qwen), traçable, maîtrisée en coûts et 
 Prérequis : SDK .NET 10.
 
 ```bash
-dotnet test                          # 16 tests, aucun appel payant
+dotnet test                          # 20 tests, aucun appel payant
 dotnet run --project src/Eap.Api     # http://localhost:5xxx
 ```
 

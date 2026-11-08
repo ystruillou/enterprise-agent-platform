@@ -95,7 +95,9 @@ app.MapPost("/agents/{id}/chat", async (string id, ChatRequest request, HttpCont
     }
     catch (ModelProviderException ex)
     {
-        logger.LogError(ex, "Échec du fournisseur {Provider} / {Model} pour l'agent {AgentId}", ex.Provider, ex.Model, id);
+        // Pas de pile d'exception ni de contenu externe dans les journaux : seulement des champs maîtrisés.
+        logger.LogError("Échec du fournisseur {Provider} / {Model} pour l'agent {AgentId} : HTTP {HttpStatus} {ProviderErrorCode} ({ExceptionType})",
+            ex.Provider, ex.Model, id, ex.HttpStatus, ex.ProviderErrorCode, ex.InnerException?.GetType().Name);
         // Le détail technique reste dans les journaux ; le client reçoit un message neutre.
         return Results.Json(new { error = "Le service de modèle est momentanément indisponible. Réessayez plus tard." },
             statusCode: StatusCodes.Status502BadGateway);
