@@ -43,7 +43,7 @@ multi-modèles (Gemini, Claude, GPT, Qwen), traçable, maîtrisée en coûts et 
 Prérequis : SDK .NET 10.
 
 ```bash
-dotnet test                          # 12 tests, aucun appel payant
+dotnet test                          # 16 tests, aucun appel payant
 dotnet run --project src/Eap.Api     # http://localhost:5xxx
 ```
 
@@ -53,8 +53,8 @@ Pour appeler les vrais modèles, videz ce paramètre et définissez les clés vo
 ```powershell
 $env:GEMINI_API_KEY = "..."          # https://aistudio.google.com/apikey
 $env:ANTHROPIC_API_KEY = "..."
-$env:Platform__ProviderOverride = ""
-dotnet run --project src/Eap.Api
+$env:ASPNETCORE_ENVIRONMENT = "Production"   # désactive le modèle simulé de appsettings.Development.json
+dotnet run --project src/Eap.Api --no-launch-profile
 ```
 
 Pour comparer les fournisseurs sur un même agent, forcez-en un :
@@ -69,9 +69,10 @@ Pour comparer les fournisseurs sur un même agent, forcez-en un :
 | GET | `/finops/usage?day=AAAA-MM-JJ` | Consommation agrégée |
 | GET | `/health` | Sonde de disponibilité |
 
-## Feuille de route
+## Feuille de route et retours d'expérience
 
-Voir [docs/ROADMAP.md](docs/ROADMAP.md).
+- [docs/ROADMAP.md](docs/ROADMAP.md) : avancement semaine par semaine
+- [docs/JOURNAL.md](docs/JOURNAL.md) : constats terrain (modèles retirés, alias qui dérivent, différences entre couches compatibles OpenAI…)
 
 ## Licence
 

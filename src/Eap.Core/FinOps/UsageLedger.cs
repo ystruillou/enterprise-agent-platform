@@ -11,6 +11,7 @@ public sealed record UsageRecord(
     string UserId,
     string Provider,
     string Model,
+    string ServedModel,
     long InputTokens,
     long OutputTokens,
     decimal CostUsd,

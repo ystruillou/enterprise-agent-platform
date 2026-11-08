@@ -67,7 +67,7 @@ app.MapGet("/agents", (AgentRegistry reg) => reg.All
     }));
 
 app.MapPost("/agents/{id}/chat", async (string id, ChatRequest request, HttpContext http,
-    AgentRegistry reg, AgentRunner runner, CancellationToken ct) =>
+    AgentRegistry reg, AgentRunner runner, ILogger<Program> logger, CancellationToken ct) =>
 {
     if (reg.Find(id) is not { } agent) return Results.NotFound(new { error = $"Agent inconnu : {id}" });
     if (string.IsNullOrWhiteSpace(request.Message) || request.Message.Length > 4000)
@@ -83,7 +83,8 @@ app.MapPost("/agents/{id}/chat", async (string id, ChatRequest request, HttpCont
             reply.Answer, reply.TraceId, reply.Sources,
             Usage = new
             {
-                reply.Usage.Provider, reply.Usage.Model, reply.Usage.InputTokens, reply.Usage.OutputTokens,
+                reply.Usage.Provider, reply.Usage.Model, reply.Usage.ServedModel,
+                reply.Usage.InputTokens, reply.Usage.OutputTokens,
                 reply.Usage.CostUsd, reply.Usage.CostEstimated, LatencyMs = Math.Round(reply.Usage.LatencyMs),
             },
         });
@@ -91,6 +92,13 @@ app.MapPost("/agents/{id}/chat", async (string id, ChatRequest request, HttpCont
     catch (QuotaExceededException ex)
     {
         return Results.Json(new { error = ex.Message }, statusCode: StatusCodes.Status429TooManyRequests);
+    }
+    catch (ModelProviderException ex)
+    {
+        logger.LogError(ex, "Échec du fournisseur {Provider} / {Model} pour l'agent {AgentId}", ex.Provider, ex.Model, id);
+        // Le détail technique reste dans les journaux ; le client reçoit un message neutre.
+        return Results.Json(new { error = "Le service de modèle est momentanément indisponible. Réessayez plus tard." },
+            statusCode: StatusCodes.Status502BadGateway);
     }
 });
 

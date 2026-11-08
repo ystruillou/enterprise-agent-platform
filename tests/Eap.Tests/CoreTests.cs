@@ -69,6 +69,16 @@ public class CoreTests
         Assert.Equal(expectedTitle, kb.Search(question)[0].Title);
     }
 
+    [Theory]
+    [InlineData("Vous vendez des téléviseurs ?")]
+    [InlineData("Nous voulons des vélos")]
+    public void Knowledge_search_returns_nothing_for_out_of_scope_question(string question)
+    {
+        var (_, _, sav) = CreateRunner();
+        var kb = KnowledgeBase.LoadFrom(Path.Combine(sav.BaseDirectory, sav.KnowledgeDir!));
+        Assert.Empty(kb.Search(question));
+    }
+
     [Fact]
     public async Task Runner_answers_from_context_and_records_usage()
     {
@@ -93,6 +103,41 @@ public class CoreTests
         await Assert.ThrowsAsync<QuotaExceededException>(() => runner.AskAsync(sav, "bob", "Livraison ?"));
         // Un autre utilisateur n'est pas bloqué.
         await runner.AskAsync(sav, "carol", "Livraison ?");
+    }
+
+    [Fact]
+    public async Task Runner_sends_prompt_and_context_in_a_single_system_message()
+    {
+        var registry = AgentRegistry.LoadFrom(AgentsRoot);
+        var sav = registry.Find("sav-produit")!;
+        var spy = new SpyChatClient();
+        var providers = new Dictionary<string, ProviderOptions> { ["fake"] = new() };
+        var kb = KnowledgeBase.LoadFrom(Path.Combine(sav.BaseDirectory, sav.KnowledgeDir!));
+        var runner = new AgentRunner(new ChatClientFactory(providers, clientOverride: spy), new InMemoryUsageLedger(), _ => kb,
+            modelOverride: new ModelOverride("fake", "fake-model"));
+
+        await runner.AskAsync(sav, "alice", "Délai de livraison ?");
+
+        var system = Assert.Single(spy.LastMessages, m => m.Role == Microsoft.Extensions.AI.ChatRole.System);
+        Assert.Contains("# Règles", system.Text);
+        Assert.Contains("[source:", system.Text);
+    }
+
+    [Fact]
+    public async Task Provider_failure_is_wrapped_and_not_billed()
+    {
+        var registry = AgentRegistry.LoadFrom(AgentsRoot);
+        var sav = registry.Find("sav-produit")!;
+        var providers = new Dictionary<string, ProviderOptions>
+        {
+            ["gemini"] = new() { Endpoint = "https://example.invalid/", ApiKeyEnv = "EAP_TEST_MISSING_KEY" },
+        };
+        var ledger = new InMemoryUsageLedger();
+        var runner = new AgentRunner(new ChatClientFactory(providers, _ => null), ledger, _ => KnowledgeBase.Empty);
+
+        var ex = await Assert.ThrowsAsync<ModelProviderException>(() => runner.AskAsync(sav, "alice", "Bonjour"));
+        Assert.Equal("gemini", ex.Provider);
+        Assert.Empty(ledger.Summarize(DateOnly.FromDateTime(DateTime.UtcNow)));
     }
 
     [Fact]

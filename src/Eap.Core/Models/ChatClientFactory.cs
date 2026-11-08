@@ -11,7 +11,8 @@ namespace Eap.Core.Models;
 /// </summary>
 public sealed class ChatClientFactory(
     IReadOnlyDictionary<string, ProviderOptions> providers,
-    Func<string, string?>? readEnvironment = null)
+    Func<string, string?>? readEnvironment = null,
+    IChatClient? clientOverride = null)
 {
     public const string TelemetrySource = "Eap.GenAI";
 
@@ -30,7 +31,11 @@ public sealed class ChatClientFactory(
             throw new InvalidOperationException($"Fournisseur inconnu : {provider}");
 
         IChatClient inner;
-        if (provider == "fake")
+        if (clientOverride is not null)
+        {
+            inner = clientOverride; // tests uniquement
+        }
+        else if (provider == "fake")
         {
             inner = new FakeChatClient(model);
         }

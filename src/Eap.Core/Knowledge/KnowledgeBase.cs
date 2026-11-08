@@ -79,8 +79,9 @@ public sealed partial class KnowledgeBase
 
     internal static IEnumerable<string> Tokenize(string text) =>
         WordRegex().Matches(RemoveDiacritics(text.ToLowerInvariant()))
-            .Select(m => Stem(m.Value))
-            .Where(w => w.Length > 1 && !StopWords.Contains(w));
+            .Select(m => m.Value)
+            .Where(w => w.Length > 1 && !StopWords.Contains(w))
+            .Select(Stem);
 
     /// <summary>Racinisation très grossière : supprime le pluriel.</summary>
     private static string Stem(string word) =>

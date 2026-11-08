@@ -11,7 +11,8 @@ et acquérir l'expérience Google Cloud et Gemini Enterprise.
 - [x] FinOps : coût par appel, plafond quotidien, quota par utilisateur
 - [x] OpenTelemetry (`gen_ai.*`) avec export OTLP optionnel
 - [x] Agent pilote 1 : SAV produit ; agent 2 : conformité promo (fiche et prompt)
-- [ ] Premier appel réel à Gemini (clé AI Studio) et comparaison avec Claude
+- [x] Premier appel réel à Gemini (clé AI Studio) : voir [JOURNAL.md](JOURNAL.md)
+- [ ] Comparaison avec Claude
 
 ## Semaine 2 : traçabilité et premiers vrais tests
 - [ ] Langfuse (cloud gratuit ou auto-hébergé) branché en OTLP
