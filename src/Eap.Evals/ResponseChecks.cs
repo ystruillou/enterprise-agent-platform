@@ -13,10 +13,10 @@ public sealed record CheckResult(string Name, bool Passed, string? Detail = null
 public static partial class ResponseChecks
 {
     public const string EscalationPhoneDigits = "0200000000";
-    public const int MaxSentences = 6; // le prompt demande 5 phrases ; tolérance d'une phrase
     public const string SuspectCheck = "ne contient pas (à arbitrer)";
 
-    public static IReadOnlyList<CheckResult> Run(EvalCase evalCase, string answer, KnownSources known)
+    /// <param name="maxSentences">Longueur maximale propre à l'agent (fiche) ; null = pas de contrôle.</param>
+    public static IReadOnlyList<CheckResult> Run(EvalCase evalCase, string answer, KnownSources known, int? maxSentences = null)
     {
         var results = new List<CheckResult>();
         var norm = Normalize(answer);
@@ -39,8 +39,11 @@ public static partial class ResponseChecks
 
         results.Add(CheckSources(answer, e.Source, known));
 
-        var sentences = CountSentences(answer);
-        results.Add(new("longueur", sentences <= MaxSentences, $"{sentences} phrases (max {MaxSentences})"));
+        if (maxSentences is { } max)
+        {
+            var sentences = CountSentences(answer);
+            results.Add(new("longueur", sentences <= max, $"{sentences} phrases (max {max})"));
+        }
 
         return results;
     }

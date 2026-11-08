@@ -15,7 +15,7 @@ multi-modèles (Gemini, Claude, GPT, Qwen), traçable, maîtrisée en coûts et 
 | **Gouvernance** | Chaque agent a une **fiche** versionnée (`agents/*/agent.yaml`) : finalité, responsables, statut de cycle de vie, risque AI Act, données personnelles, budget, seuil d'évaluation. Elle est validée au démarrage |
 | **Traçabilité** | OpenTelemetry (conventions `gen_ai.*`), export OTLP vers Langfuse, Cloud Trace ou Jaeger. Le contenu des prompts n'est **pas** journalisé par défaut (RGPD) |
 | **FinOps** | Coût calculé à chaque appel, agrégé par agent et par modèle, plafond quotidien par agent et quota par utilisateur |
-| **RAG** | Recherche par mots-clés, sémantique ou hybride (fusion RRF), choisie dans la fiche ; seuil de similarité calibré ; repli automatique sur les mots-clés si les embeddings sont indisponibles |
+| **RAG** | Recherche par mots-clés, sémantique, hybride (fusion RRF) ou base entière (référentiel court à appliquer en totalité), choisie dans la fiche ; seuil de similarité calibré ; repli automatique sur les mots-clés si les embeddings sont indisponibles |
 | **Garde-fous** | Vérification des sources citées avant de répondre : une source absente de la base est remplacée, l'intervention est tracée |
 | **Qualité** | [Cadre d'évaluation](evals/README.md) : jeux de test, contrôles déterministes (dont la détection des **sources inventées**), modèle juge, seuil de passage en production inscrit dans la fiche et appliqué en CI |
 | **Sécurité** | Aucune clé dans le code (variables d'environnement, puis Secret Manager), validation des entrées *(IAM et IAP en semaine 4)* |
@@ -69,7 +69,7 @@ et seulement 2 interventions du garde-fou, inoffensives, contre 9 vraies inventi
 Prérequis : SDK .NET 10.
 
 ```bash
-dotnet test                          # 75 tests, aucun appel payant
+dotnet test                          # 79 tests, aucun appel payant
 dotnet run --project src/Eap.Api     # http://localhost:5xxx
 ```
 

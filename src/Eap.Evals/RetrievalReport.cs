@@ -18,7 +18,7 @@ public static class RetrievalReport
         var raw = retriever as SemanticRetriever;
 
         Console.WriteLine($"Recherche {mode} sur {agent.Id} ({kb.Count} sections, top {agent.Retrieval.Top}" +
-                          (mode == RetrievalMode.Keyword ? ")" : $", seuil {agent.Retrieval.MinSimilarity:0.00}, {agent.Retrieval.EmbeddingModel})"));
+                          (mode is RetrievalMode.Keyword or RetrievalMode.All ? ")" : $", seuil {agent.Retrieval.MinSimilarity:0.00}, {agent.Retrieval.EmbeddingModel})"));
         Console.WriteLine();
 
         var labeledTop = new List<double>();

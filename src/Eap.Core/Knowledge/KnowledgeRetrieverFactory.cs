@@ -26,6 +26,7 @@ public sealed class KnowledgeRetrieverFactory(
         var r = agent.Retrieval;
         var mode = modeOverride ?? r.Mode;
         if (mode == RetrievalMode.Keyword) return knowledge;
+        if (mode == RetrievalMode.All) return new FullKnowledgeRetriever(knowledge);
 
         var provider = embeddingProviderOverride ?? r.EmbeddingProvider;
         // Le seuil est calibré pour le modèle d'embeddings de la fiche : les similarités d'un autre modèle

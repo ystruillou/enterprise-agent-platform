@@ -61,7 +61,8 @@ public sealed class AgentRegistry
             yield return "un agent à haut risque (AI Act) doit documenter ses mesures dans risk.notes";
         if (m.Retrieval.Top is < 1 or > 20) yield return "retrieval.top doit être compris entre 1 et 20";
         if (m.Retrieval.MinSimilarity is < 0 or >= 1) yield return "retrieval.min_similarity doit être compris entre 0 et 1";
-        if (m.Retrieval.Mode != Knowledge.RetrievalMode.Keyword
+        if (m.Evaluation.MaxSentences is < 1) yield return "evaluation.max_sentences doit être >= 1";
+        if (m.Retrieval.Mode is Knowledge.RetrievalMode.Semantic or Knowledge.RetrievalMode.Hybrid
             && (string.IsNullOrWhiteSpace(m.Retrieval.EmbeddingProvider) || string.IsNullOrWhiteSpace(m.Retrieval.EmbeddingModel)))
             yield return "la recherche sémantique exige retrieval.embedding_provider et retrieval.embedding_model";
         if (!string.IsNullOrEmpty(m.BaseDirectory) && !File.Exists(Path.Combine(m.BaseDirectory, m.PromptFile)))

@@ -94,4 +94,6 @@ public sealed class AgentEvaluation
     public string? Dataset { get; set; }
     /// <summary>Score minimal (0..1) exigé pour passer en production.</summary>
     public double MinScore { get; set; } = 0.8;
+    /// <summary>Longueur maximale des réponses, en phrases (format propre à l'agent) ; absent = pas de contrôle de longueur.</summary>
+    public int? MaxSentences { get; set; }
 }

@@ -66,6 +66,15 @@ public class EvalTests
         Assert.Contains(checks, c => c is { Name: "escalade vers un conseiller", Passed: true });
     }
 
+    [Fact]
+    public void Length_is_checked_only_when_the_agent_declares_a_limit()
+    {
+        var c = Case(new Expectations { Source = SourceRequirement.Optional });
+        const string longAnswer = "Un. Deux. Trois. Quatre. Cinq. Six. Sept. Huit.";
+        Assert.DoesNotContain(ResponseChecks.Run(c, longAnswer, Known), r => r.Name == "longueur");
+        Assert.Contains(ResponseChecks.Run(c, longAnswer, Known, maxSentences: 6), r => r is { Name: "longueur", Passed: false });
+    }
+
     [Theory]
     [InlineData("Phrase un. Phrase deux. Phrase trois.\n\nSource : catalogue.md", 3)]
     [InlineData("La bouilloire (réf. BK-170) coûte 39,90 €. Elle chauffe vite.", 2)]

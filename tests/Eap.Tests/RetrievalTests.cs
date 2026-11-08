@@ -94,15 +94,43 @@ public class RetrievalTests
         Assert.Null(new Expectations().ContextFound(["Livraison"]));
     }
 
-    [Fact]
-    public void Every_expected_context_in_the_dataset_names_a_real_section()
+    [Theory]
+    [InlineData("sav-produit")]
+    [InlineData("conformite-promo")]
+    public void Every_expected_context_in_the_dataset_names_a_real_section(string agentId)
     {
-        var titles = SavKnowledge().Chunks.Select(c => c.Title).ToList();
-        var dataset = Path.Combine(Path.GetDirectoryName(CoreTests.AgentsRoot)!, "evals", "sav-produit.jsonl");
+        var agent = AgentRegistry.LoadFrom(CoreTests.AgentsRoot).Find(agentId)!;
+        var titles = KnowledgeBase.LoadFrom(Path.Combine(agent.BaseDirectory, agent.KnowledgeDir!)).Chunks.Select(c => c.Title).ToList();
+        var dataset = Path.GetFullPath(Path.Combine(agent.BaseDirectory, agent.Evaluation.Dataset!));
         foreach (var c in EvalCase.LoadJsonl(dataset))
             foreach (var label in c.Expect.Context)
                 Assert.True(new Expectations { Context = [label] }.ContextFound(titles) == true,
                     $"{c.Id} : « {label} » ne correspond à aucune section");
+    }
+
+    [Fact]
+    public async Task Full_mode_sends_every_rule_whatever_the_wording()
+    {
+        var agent = AgentRegistry.LoadFrom(CoreTests.AgentsRoot).Find("conformite-promo")!;
+        var retriever = new KnowledgeRetrieverFactory(new ChatClientFactory(new Dictionary<string, ProviderOptions>())).For(agent);
+        var kb = KnowledgeBase.LoadFrom(Path.Combine(agent.BaseDirectory, agent.KnowledgeDir!));
+
+        var result = await retriever.SearchAsync("-30 % sur tous les canapés ce week-end !"); // aucun mot commun avec les règles
+        Assert.Equal(RetrievalMode.All, result.Mode);
+        Assert.Equal(kb.Chunks.Count, result.Hits.Count);
+    }
+
+    [Fact]
+    public void Full_mode_refuses_a_large_knowledge_base()
+    {
+        var md = string.Concat(Enumerable.Range(0, FullKnowledgeRetriever.MaxSections + 1).Select(i => $"# Règle {i}\nTexte {i}.\n"));
+        var dir = Directory.CreateTempSubdirectory();
+        try
+        {
+            File.WriteAllText(Path.Combine(dir.FullName, "regles.md"), md);
+            Assert.Throws<InvalidOperationException>(() => new FullKnowledgeRetriever(KnowledgeBase.LoadFrom(dir.FullName)));
+        }
+        finally { dir.Delete(true); }
     }
 
     private sealed class FailingEmbeddingGenerator : IEmbeddingGenerator<string, Embedding<float>>

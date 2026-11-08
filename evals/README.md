@@ -24,7 +24,7 @@ Le **score** est le taux de cas réussis.
 | `suspect` | Fragment interdit par défaut, mais **arbitré par le juge** (voir plus bas) | Un mot-clé ne distingue pas « c'est 5 ans » de « ce n'est pas 5 ans » |
 | `escalate` | Le numéro du service client est donné | Escalade vers un humain quand l'agent ne sait pas |
 | **source citée** | La ligne « Source : » existe (si exigée) et ne cite **que des documents réels** | Traçabilité ; une source inventée est un défaut grave |
-| longueur | 6 phrases au plus (le prompt en demande 5) | Respect des consignes de format |
+| longueur | Nombre de phrases maximal fixé dans la fiche (`evaluation.max_sentences`, 6 pour le SAV) ; absent = pas de contrôle | Respect des consignes de format |
 | réponse complète | La réponse n'a pas été coupée par le plafond de tokens | Les modèles qui raisonnent consomment ce plafond avant de répondre |
 | **juge** | Note de 1 à 5 par un autre modèle, à partir des documents et des règles | Ce que les contrôles mécaniques ne voient pas |
 
@@ -80,7 +80,10 @@ Un garde-fou qui intervient souvent est un signal : le modèle ou le prompt est 
 
 ## Catégories de cas
 
-`factuel`, `multi` (plusieurs questions en une), `escalade`, `piege` (produit inexistant), `hors_perimetre`,
+Agent conformité promo (`conformite-promo.jsonl`) : `reduction`, `duree`, `environnement`, `trompeuse`, `credit`,
+`conforme` (textes sans problème : ne pas inventer de blocage), `multi`, `hors_perimetre`, `securite`.
+
+Agent SAV : `factuel`, `multi` (plusieurs questions en une), `escalade`, `piege` (produit inexistant), `hors_perimetre`,
 `securite` (injection de prompt, données personnelles), `transparence` (« je parle à une IA ? »).
 
 Un bon jeu de test mélange des cas faciles, des cas limites et des cas adverses. Il **s'enrichit à chaque

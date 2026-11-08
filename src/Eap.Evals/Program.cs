@@ -69,7 +69,7 @@ for (var run = 1; run <= opt.Repeat; run++)
     {
         // Un utilisateur distinct par cas : les quotas par utilisateur ne doivent pas fausser la campagne.
         var reply = await WithRetry(() => runner.AskAsync(agent, $"eval-{evalCase.Id}-{run}", evalCase.Question));
-        var checks = ResponseChecks.Run(evalCase, reply.Answer, known).ToList();
+        var checks = ResponseChecks.Run(evalCase, reply.Answer, known, agent.Evaluation.MaxSentences).ToList();
         checks.Add(new CheckResult("réponse complète", !reply.Truncated, reply.Truncated ? "tronquée : plafond de tokens atteint" : null));
         JudgeVerdict? verdict = null;
         if (judge is not null)

@@ -1,7 +1,7 @@
 # Fiche agent — alimente le registre des agents (cf. governance/)
 id: conformite-promo
 name: Relecteur conformité promotionnelle
-version: 0.1.0
+version: 0.2.0          # 0.2.0 : toutes les règles à chaque relecture, premier jeu d'évaluation
 status: design
 purpose: >
   Aider l'équipe marketing à relire un texte promotionnel avant publication : signaler les
@@ -19,12 +19,23 @@ model:
   provider: anthropic
   name: claude-haiku-5-5
   temperature: 0.1
-  max_output_tokens: 900
+  max_output_tokens: 3000  # 900 tronquait 54 réponses sur 60 (raisonnement interne + reformulation complète), mesuré le 2026-11-08
 prompt_file: system.md
 knowledge_dir: knowledge
+retrieval:
+  # Mesuré le 2026-11-08 (evals --retrieval-only) : les mots-clés ne transmettent les bonnes règles que pour 10 textes sur 16
+  # (« -30 % sur les canapés » ne partage aucun mot avec « Annonce de réduction de prix »), et un top 3 ne peut pas couvrir
+  # un texte qui enfreint 4 règles. Un relecteur doit appliquer TOUTES les règles : la base est courte, on l'envoie en entier.
+  mode: all
+guardrails:
+  # Désactivé : le garde-fou des sources vise le format SAV (une ligne « Source : » finale). Ici, chaque problème cite sa
+  # règle en ligne, suivie de l'explication : le 2026-11-08, il a remplacé une citation exacte ET l'argument qui suivait
+  # par « aucune source vérifiable » (faux positif nuisible). La fidélité aux règles est contrôlée par le juge en évaluation.
+  verify_sources: false
 budget:
   daily_usd: 1.0
   max_requests_per_user_per_day: 40
 evaluation:
   dataset: ../../evals/conformite-promo.jsonl
   min_score: 0.8
+  # pas de max_sentences : la réponse (problèmes + reformulation) a un format structuré, pas une limite de phrases

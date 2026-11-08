@@ -222,6 +222,45 @@ Deux rôles pour le juge :
    le refuse ; le juge donne 5/5. Même famille que la lampe : candidat à passer en `suspect`, avec un critère
    (« aucun prix pour le grille-pain »). Le cas n'est pas modifié dans cette campagne : le score publié reste 95 %.
 
+**Correction du jeu SAV après relecture** : esc-03 passe de `none: ["€"]` à `suspect: ["€"]`, avec le critère « aucun prix
+pour le grille-pain ; citer le vrai prix d'autres produits est acceptable ». Le juge avait confirmé que la réponse refusée
+était juste. Appliqué aux campagnes suivantes ; les scores publiés ci-dessus restent ceux mesurés avant la correction.
+
+## 2026-11-08 : second pilote, le relecteur de conformité promotionnelle
+
+Jeu de test `evals/conformite-promo.jsonl` : 20 textes en 8 catégories (réduction de prix, durée et stocks, allégations
+environnementales, pratiques trompeuses, crédit, **textes conformes** où il ne faut pas inventer de blocage, multi-règles,
+hors périmètre, injection). Agent `claude-haiku-5-5`, juge `claude-sonnet-5-5`.
+
+| Étape | Changement | Score |
+|---|---|---|
+| Recherche seule, mots-clés | « -30 % sur les canapés » ne partage aucun mot avec « Annonce de réduction de prix » | 10/16 textes reçoivent les bonnes règles |
+| 1. Base entière (`retrieval.mode: all`) | Un relecteur applique toutes les règles ; la base fait 5 sections | 16/16, mais **25 %** (3 passages) |
+| 2. `max_output_tokens` 900 → 3 000 | 54 réponses sur 60 étaient tronquées, certaines vides | **100 %** (1 passage) |
+| 3. Garde-fou des sources désactivé pour cet agent | Faux positif nuisible, voir plus bas | **90 %** ✅ (54/60, 3 passages) |
+
+**Enseignements :**
+
+1. **La recherche n'est pas toujours la bonne réponse.** Un relecteur de conformité doit appliquer *toutes* les règles, pas
+   celles qui ressemblent au texte, et un top 3 ne peut pas couvrir un texte qui en enfreint 4. Pour un référentiel court,
+   on l'envoie en entier : nouveau mode `all`, plafonné à 30 sections pour qu'il ne serve pas par erreur sur une grosse base.
+2. **Le même piège deux fois : le plafond de tokens.** Déjà vu sur le SAV, il a coûté 75 points ici : une relecture avec
+   reformulation est longue, et Claude raisonne avant d'écrire. Le contrôle « réponse complète » l'a signalé sur chaque cas.
+3. **Un garde-fou conçu pour un format peut nuire sur un autre.** Le garde-fou des sources attend une ligne « Source : »
+   finale (format SAV). Le relecteur cite une règle par problème, suivie de son explication : le garde-fou a remplacé une
+   citation exacte **et l'argument qui suivait** par « aucune source vérifiable ». Désactivé pour cet agent (décision écrite
+   dans sa fiche), en attendant un garde-fou adapté aux citations en ligne. La limite de longueur, propre au SAV,
+   est passée dans la fiche (`evaluation.max_sentences`) pour la même raison.
+4. **Le même défaut côté évaluation, laissé visible.** 3 des 6 échecs viennent du contrôle « source citée », qui lit ces
+   citations en ligne comme des sources inventées, alors que le juge donne 4 ou 5/5. Le contrôle n'est pas modifié
+   après coup : le score publié reste 90 %, et l'adaptation du contrôle est inscrite à la feuille de route.
+5. **Les vrais défauts, vus par le juge seul.** Sur « Soldes d'hiver », l'agent exige une année et parle d'« appellation
+   réglementée », deux règles absentes de sa base (2 fois sur 3). Sur un texte conforme, il crée un blocage
+   « tant que non vérifié » (1 fois sur 3). Comme le SAV Claude, il en dit plus que ses documents.
+6. **L'arbitrage du juge a servi en conditions réelles : 6 contrôles levés**, tous relus et justifiés : « aucun problème
+   bloquant », « bloquant seulement si l'offre relève du crédit ». C'est exactement la négation que les mots-clés ne lisent pas.
+7. **Coût** : 0,04 $ pour 60 relectures, 0,49 $ de juge, latence médiane 5,5 s, acceptable pour un outil interne de relecture.
+
 ## Coût observé lors du premier branchement
 
 **Coût observé :** 4 questions pour environ 0,0012 $ avec `gemini-3.5-flash-lite`, soit environ 0,0003 $ par réponse et

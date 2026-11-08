@@ -40,3 +40,4 @@ budget:
 evaluation:
   dataset: ../../evals/sav-produit.jsonl
   min_score: 0.85
+  max_sentences: 6        # le prompt demande 5 phrases ; tolérance d'une phrase
