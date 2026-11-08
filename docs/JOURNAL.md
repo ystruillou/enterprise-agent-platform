@@ -261,6 +261,32 @@ hors périmètre, injection). Agent `claude-haiku-5-5`, juge `claude-sonnet-5-5`
    bloquant », « bloquant seulement si l'offre relève du crédit ». C'est exactement la négation que les mots-clés ne lisent pas.
 7. **Coût** : 0,04 $ pour 60 relectures, 0,49 $ de juge, latence médiane 5,5 s, acceptable pour un outil interne de relecture.
 
+### Version 0.3.0 : contrôle des citations en ligne, règles de relecture
+
+- **Sources** : une citation est coupée entre la **référence** (jusqu'à la première fin de phrase hors parenthèses) et le
+  **commentaire** qui suit. Seule la référence est vérifiée. Une parenthèse est acceptée si tous ses mots viennent du
+  contenu des documents (« (Code de la consommation, art. L112-1-1) ») ; hors parenthèses, le contenu ne valide rien
+  (sinon « Consignes service client » passerait). Toutes les citations sont vérifiées, plus seulement la première, et le
+  garde-fou ne remplace que la référence invérifiable, en conservant l'argument. Tests écrits à partir des 3 citations
+  réelles refusées à tort. Garde-fou réactivé pour le relecteur.
+- **Prompt** : un problème doit découler d'une règle du contexte ; un point utile mais non couvert va dans une section
+  « Hors référentiel », sans niveau ; pas de blocage conditionnel sur un texte qui respecte la règle.
+
+| | 0.2.0 | **0.3.0** |
+|---|---|---|
+| Score (3 passages) | 90 % | **97 %** ✅ (58/60) |
+| Faux échecs du contrôle des sources | 3 | 0 |
+| Règles inventées (« Soldes d'hiver ») | 2 sur 3 | 0 sur 3 |
+| Blocage inventé sur un texte conforme | 1 sur 3 | 0 sur 3 |
+| Corrections du garde-fou | (désactivé) | 0 |
+
+Les 2 échecs restants, vus par le juge seul : un point signalé deux fois malgré la consigne, et un superlatif classé
+« à vérifier » au lieu de « bloquant », avec une reformulation qui ajoute une affirmation (« dans toutes nos boutiques »).
+Un jugement sur 60 est resté sans note (réponse du juge illisible) : le cas est compté réussi sur les seuls contrôles.
+
+**Non-régression du SAV** avec le nouveau contrôle (3 passages, sans juge) : 100 %, 9 corrections du garde-fou, toutes de
+vraies inventions (« Instructions générales », « Consignes de service »). Coût de l'étape : environ 0,70 $.
+
 ## Coût observé lors du premier branchement
 
 **Coût observé :** 4 questions pour environ 0,0012 $ avec `gemini-3.5-flash-lite`, soit environ 0,0003 $ par réponse et

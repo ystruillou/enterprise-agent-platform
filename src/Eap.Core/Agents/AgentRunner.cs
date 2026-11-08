@@ -176,7 +176,7 @@ public sealed class AgentRunner(
         if (agent.Guardrails.VerifySources && retriever.Corpus.Count > 0)
         {
             var (guarded, action) = SourceGuard.Apply(answer, _knownSources.GetOrAdd(retriever, r =>
-                new KnownSources(r.Corpus.Select(c => c.Source), r.Corpus.Select(c => c.Title))));
+                new KnownSources(r.Corpus.Select(c => c.Source), r.Corpus.Select(c => c.Title), r.Corpus.Select(c => c.Content))));
             answer = guarded;
             if (action is not null) actions.Add(action);
         }

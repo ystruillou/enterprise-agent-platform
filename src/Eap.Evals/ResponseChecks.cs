@@ -54,15 +54,16 @@ public static partial class ResponseChecks
     /// </summary>
     public static CheckResult CheckSources(string answer, SourceRequirement requirement, KnownSources known)
     {
-        var line = ExtractSourceLine(answer);
-        if (line is null)
+        var citations = SourceLine.All(answer);
+        if (citations.Count == 0)
             return new("source citée", requirement == SourceRequirement.Optional,
                 requirement == SourceRequirement.Optional ? "aucune (facultative)" : "ligne « Source : » absente");
 
-        var leftover = known.UnknownPart(line);
-        return leftover is null
-            ? new("source citée", true, line)
-            : new("source citée", false, $"source inventée : « {leftover} » (ligne : {line})");
+        // Toutes les citations sont vérifiées (une par problème chez le relecteur de conformité), la référence seule.
+        foreach (var c in citations)
+            if (known.UnknownPart(c.Text) is { } leftover)
+                return new("source citée", false, $"source inventée : « {leftover} » (référence : {c.Reference})");
+        return new("source citée", true, string.Join(" ; ", citations.Select(c => c.Reference)));
     }
 
     public static string? ExtractSourceLine(string answer) => SourceLine.Extract(answer);

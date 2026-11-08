@@ -45,6 +45,47 @@ public class GuardrailTests
         Assert.Null(action);
     }
 
+    private static KnownSources ComplianceSources()
+    {
+        var agent = AgentRegistry.LoadFrom(CoreTests.AgentsRoot).Find("conformite-promo")!;
+        var kb = KnowledgeBase.LoadFrom(Path.Combine(agent.BaseDirectory, agent.KnowledgeDir!));
+        return new KnownSources(kb.Chunks.Select(c => c.Source), kb.Chunks.Select(c => c.Title), kb.Chunks.Select(c => c.Content));
+    }
+
+    // Citations réelles du relecteur de conformité, refusées à tort le 2026-11-08 (le juge donnait 4 ou 5/5).
+    [Theory]
+    [InlineData("regles-promotion.md › Annonce de réduction de prix (Code de la consommation, art. L112-1-1)")]
+    [InlineData("regles-promotion.md › Annonce de réduction de prix*. Toute annonce de réduction doit mentionner le prix le plus bas pratiqué par le vendeur au cours des 30 jours précédant la réduction (Code de la consommation, art. L112-1-1). Un pourcentage seul est à risque")]
+    [InlineData("regles-promotion.md › Crédit à la consommation.* Si le service juridique confirme qu'il ne s'agit pas d'un crédit, la mention TAEG doit être retirée")]
+    public void Inline_citations_followed_by_an_explanation_are_accepted(string citation)
+    {
+        Assert.Null(ComplianceSources().UnknownPart(citation));
+    }
+
+    [Theory]
+    [InlineData("regles-promotion.md › Charte éthique du groupe. Le texte doit être revu.")]  // section inventée, commentaire ensuite
+    [InlineData("regles-promotion.md › Annonce de réduction de prix (Charte interne 2024)")] // parenthèse absente des documents
+    [InlineData("Consignes générales du service marketing")]
+    public void Invented_references_are_still_caught_whatever_follows(string citation)
+    {
+        Assert.NotNull(ComplianceSources().UnknownPart(citation));
+    }
+
+    [Fact]
+    public void Only_the_invented_reference_is_replaced_and_the_argument_is_kept()
+    {
+        const string answer = """
+            - « -30 % » : bloquant. Source : regles-promotion.md › Annonce de réduction de prix. Le prix antérieur manque.
+            - « vert » : à vérifier. Source : Charte RSE interne. Le terme doit être justifié.
+            """;
+        var (guarded, action) = SourceGuard.Apply(answer, ComplianceSources());
+
+        Assert.NotNull(action);
+        Assert.Contains("Source : regles-promotion.md › Annonce de réduction de prix. Le prix antérieur manque.", guarded); // intacte
+        Assert.Contains(SourceGuard.Replacement + " Le terme doit être justifié.", guarded);                             // argument conservé
+        Assert.DoesNotContain("Charte RSE", guarded);
+    }
+
     [Theory]
     [InlineData(true)]
     [InlineData(false)]

@@ -1,7 +1,7 @@
 # Fiche agent — alimente le registre des agents (cf. governance/)
 id: conformite-promo
 name: Relecteur conformité promotionnelle
-version: 0.2.0          # 0.2.0 : toutes les règles à chaque relecture, premier jeu d'évaluation
+version: 0.3.0          # 0.2.0 : toutes les règles à chaque relecture ; 0.3.0 : règles de relecture, garde-fou réactivé
 status: design
 purpose: >
   Aider l'équipe marketing à relire un texte promotionnel avant publication : signaler les
@@ -28,10 +28,10 @@ retrieval:
   # un texte qui enfreint 4 règles. Un relecteur doit appliquer TOUTES les règles : la base est courte, on l'envoie en entier.
   mode: all
 guardrails:
-  # Désactivé : le garde-fou des sources vise le format SAV (une ligne « Source : » finale). Ici, chaque problème cite sa
-  # règle en ligne, suivie de l'explication : le 2026-11-08, il a remplacé une citation exacte ET l'argument qui suivait
-  # par « aucune source vérifiable » (faux positif nuisible). La fidélité aux règles est contrôlée par le juge en évaluation.
-  verify_sources: false
+  # Réactivé en 0.3.0. Désactivé en 0.2.0 : le garde-fou ne connaissait que le format SAV (une ligne « Source : » finale)
+  # et remplaçait une citation exacte suivie de son explication. Il vérifie maintenant chaque citation, la référence seule,
+  # et ne remplace que la référence invérifiable, en conservant l'argument.
+  verify_sources: true
 budget:
   daily_usd: 1.0
   max_requests_per_user_per_day: 40

@@ -36,7 +36,7 @@ et acquérir l'expérience Google Cloud et Gemini Enterprise.
 - [ ] Garde-fou de pertinence : une source réelle mais hors sujet passe le contrôle d'existence (vu par le juge sur esc-02)
 - [ ] Juge moins cher pour la CI (Haiku ou Flash payant), calibré contre Sonnet sur les mêmes réponses
 - [x] Jeu de test de l'agent conformité promo (20 cas, 8 catégories), mode « base entière », limite de longueur propre à chaque fiche
-- [ ] Garde-fou **et** contrôle des sources adaptés aux citations en ligne (format conformité) : 3 faux échecs sur 60, garde-fou désactivé pour cet agent
+- [x] Garde-fou et contrôle des sources adaptés aux citations en ligne ; relecteur 0.3.0 à 97 % (3 passages)
 
 ## Semaine 4 : déploiement Google Cloud
 - [ ] Projet GCP, budget et alertes, comptes de service à moindre privilège

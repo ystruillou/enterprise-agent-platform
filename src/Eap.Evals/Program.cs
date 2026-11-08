@@ -34,7 +34,7 @@ if (string.IsNullOrWhiteSpace(agent.Evaluation.Dataset))
 if (opt.NoGuardrails) agent.Guardrails.VerifySources = false;
 var cases = EvalCase.LoadJsonl(Path.GetFullPath(Path.Combine(agent.BaseDirectory, agent.Evaluation.Dataset)));
 var kb = agent.KnowledgeDir is { Length: > 0 } dir ? KnowledgeBase.LoadFrom(Path.Combine(agent.BaseDirectory, dir)) : KnowledgeBase.Empty;
-var known = new KnownSources(kb.Chunks.Select(c => c.Source), kb.Chunks.Select(c => c.Title));
+var known = new KnownSources(kb.Chunks.Select(c => c.Source), kb.Chunks.Select(c => c.Title), kb.Chunks.Select(c => c.Content));
 
 var clients = new ChatClientFactory(providers);
 var retrievalMode = opt.Retrieval ?? agent.Retrieval.Mode;
