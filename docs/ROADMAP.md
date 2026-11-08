@@ -12,7 +12,8 @@ et acquérir l'expérience Google Cloud et Gemini Enterprise.
 - [x] OpenTelemetry (`gen_ai.*`) avec export OTLP optionnel
 - [x] Agent pilote 1 : SAV produit ; agent 2 : conformité promo (fiche et prompt)
 - [x] Premier appel réel à Gemini (clé AI Studio) : voir [JOURNAL.md](JOURNAL.md)
-- [ ] Comparaison avec Claude
+- [x] Comparaison avec Claude (Haiku 5.5) : voir [JOURNAL.md](JOURNAL.md)
+- [ ] Claude via le SDK officiel `Anthropic` (réglage de l'effort de raisonnement) au lieu de la couche compatible OpenAI
 
 ## Semaine 2 : traçabilité et premiers vrais tests
 - [ ] Langfuse (cloud gratuit ou auto-hébergé) branché en OTLP

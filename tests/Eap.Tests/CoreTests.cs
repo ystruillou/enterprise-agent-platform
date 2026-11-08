@@ -123,6 +123,23 @@ public class CoreTests
         Assert.Contains("[source:", system.Text);
     }
 
+    [Theory]
+    [InlineData(true, 0.2f)]
+    [InlineData(false, null)]
+    public async Task Temperature_is_sent_only_to_providers_that_support_it(bool supports, float? expected)
+    {
+        var registry = AgentRegistry.LoadFrom(AgentsRoot);
+        var sav = registry.Find("sav-produit")!;
+        var spy = new SpyChatClient();
+        var providers = new Dictionary<string, ProviderOptions> { ["fake"] = new() { SupportsTemperature = supports } };
+        var runner = new AgentRunner(new ChatClientFactory(providers, clientOverride: spy), new InMemoryUsageLedger(),
+            _ => KnowledgeBase.Empty, modelOverride: new ModelOverride("fake", "fake-model"));
+
+        await runner.AskAsync(sav, "alice", "Bonjour");
+
+        Assert.Equal(expected, spy.LastOptions?.Temperature);
+    }
+
     [Fact]
     public async Task Provider_failure_is_wrapped_and_not_billed()
     {

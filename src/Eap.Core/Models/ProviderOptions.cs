@@ -13,6 +13,11 @@ public sealed class ProviderOptions
     /// <summary>Nom de la variable d'environnement qui contient la clé (jamais la clé elle-même).</summary>
     public string? ApiKeyEnv { get; set; }
 
+    /// <summary>
+    /// Le fournisseur accepte-t-il le paramètre <c>temperature</c> ? Les modèles Claude récents le refusent (HTTP 400).
+    /// </summary>
+    public bool SupportsTemperature { get; set; } = true;
+
     /// <summary>Tarifs par modèle, en USD par million de tokens.</summary>
     public Dictionary<string, ModelPrice> Prices { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 }

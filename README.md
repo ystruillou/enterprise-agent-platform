@@ -18,6 +18,17 @@ multi-modèles (Gemini, Claude, GPT, Qwen), traçable, maîtrisée en coûts et 
 | **Qualité** | Jeux de test et seuils de passage en production, contrôlés en CI *(semaine 3)* |
 | **Sécurité** | Aucune clé dans le code (variables d'environnement, puis Secret Manager), validation des entrées *(IAM et IAP en semaine 4)* |
 
+## Premier résultat : Gemini et Claude sur le même agent
+
+Agent SAV, mêmes 5 questions, seul le modèle change (détails dans [docs/JOURNAL.md](docs/JOURNAL.md)) :
+
+| | `gemini-3.5-flash-lite` | `claude-haiku-5-5` |
+|---|---|---|
+| Faits exacts | 5/5 | 5/5 |
+| Sources inventées | 2/5 | 0/5 |
+| Latence | ~0,8 s | ~2 s |
+| Coût des 5 réponses | 0,00168 $ | 0,00130 $ |
+
 ## Architecture
 
 ```
@@ -43,7 +54,7 @@ multi-modèles (Gemini, Claude, GPT, Qwen), traçable, maîtrisée en coûts et 
 Prérequis : SDK .NET 10.
 
 ```bash
-dotnet test                          # 20 tests, aucun appel payant
+dotnet test                          # 22 tests, aucun appel payant
 dotnet run --project src/Eap.Api     # http://localhost:5xxx
 ```
 

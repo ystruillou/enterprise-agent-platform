@@ -31,5 +31,35 @@ Un 403 ponctuel est apparu sur l'offre gratuite après de nombreux appels rappro
 → Les erreurs fournisseur renvoient maintenant une 502 neutre au client, avec le détail dans les journaux.
 À faire : nouvelles tentatives avec temporisation, puis bascule vers un modèle de secours.
 
+## 2026-11-08 : comparaison Gemini et Claude sur l'agent SAV
+
+Mêmes 5 questions, même prompt, même base de connaissances. Seul le modèle change, via la configuration.
+
+| Critère | `gemini-3.5-flash-lite` | `claude-haiku-5-5` |
+|---|---|---|
+| Exactitude des faits (5 questions) | 5/5 | 5/5 |
+| Refus hors périmètre et escalade | 2/2 | 2/2 |
+| **Sources inventées** | **2/5** (« Consignes de service », « Catalogue général… ») | **0/5** |
+| Latence | 650 à 1 200 ms | 1 700 à 2 300 ms |
+| Tokens de sortie par réponse | 50 à 100 | 230 à 550 (dont raisonnement interne facturé) |
+| Coût des 5 questions | 0,00168 $ | 0,00130 $ (−23 %) |
+
+**Constats :**
+- **Le paramètre `temperature` est refusé par Claude Haiku 5.5 (HTTP 400).** Chaque fournisseur déclare maintenant
+  `SupportsTemperature`, et la plateforme n'envoie le paramètre qu'à ceux qui l'acceptent. Une même fiche agent reste ainsi portable.
+- **Claude raisonne avant de répondre** (raisonnement adaptatif activé par défaut). Ce raisonnement est invisible mais facturé : il explique
+  les 230 à 550 tokens de sortie pour des réponses de 60 à 100 mots, et la latence plus élevée. Grâce à son prix au token,
+  Claude reste moins cher ici. Le niveau d'effort se règle avec le SDK officiel (piste : effort `low` pour un agent de FAQ).
+- **Claude respecte mieux la consigne de citer ses sources**, ce qui compte pour la traçabilité et la confiance.
+  Gemini répond plus vite.
+- La couche compatible OpenAI convient pour ce banc d'essai, mais Anthropic recommande son SDK officiel en production :
+  c'est une étape de la feuille de route.
+
+**Choix argumenté** (le genre de recommandation attendue d'un expert) : pour un SAV client, le coût et la qualité
+des sources font pencher vers Claude, à valider sur un jeu d'évaluation plus large (semaine 3).
+Si la latence est critique (chat en direct), Gemini garde l'avantage.
+
+## Coût observé lors du premier branchement
+
 **Coût observé :** 4 questions pour environ 0,0012 $ avec `gemini-3.5-flash-lite`, soit environ 0,0003 $ par réponse et
 350 $ pour un million de réponses. Latence de 600 à 900 ms.

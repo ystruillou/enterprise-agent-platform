@@ -9,10 +9,12 @@ internal sealed class SpyChatClient : IChatClient
     private readonly FakeChatClient _inner = new("fake-model");
 
     public IReadOnlyList<ChatMessage> LastMessages { get; private set; } = [];
+    public ChatOptions? LastOptions { get; private set; }
 
     public Task<ChatResponse> GetResponseAsync(IEnumerable<ChatMessage> messages, ChatOptions? options = null, CancellationToken cancellationToken = default)
     {
         LastMessages = messages.ToList();
+        LastOptions = options;
         return _inner.GetResponseAsync(LastMessages, options, cancellationToken);
     }
 

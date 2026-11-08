@@ -22,6 +22,9 @@ public sealed class ChatClientFactory(
     public IChatClient Create(string provider, string model) =>
         _cache.GetOrAdd((provider.ToLowerInvariant(), model), key => Build(key.Item1, key.Item2));
 
+    public bool SupportsTemperature(string provider) =>
+        !providers.TryGetValue(provider, out var p) || p.SupportsTemperature;
+
     public ModelPrice? PriceOf(string provider, string model) =>
         providers.TryGetValue(provider, out var p) && p.Prices.TryGetValue(model, out var price) ? price : null;
 

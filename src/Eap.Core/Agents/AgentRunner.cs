@@ -106,17 +106,17 @@ public sealed class AgentRunner(
             new(ChatRole.System, agent.SystemPrompt.TrimEnd() + "\n\n" + BuildContext(chunks)),
             new(ChatRole.User, question),
         };
-        var options = new ChatOptions
-        {
-            ModelId = agent.Model.Name,
-            Temperature = agent.Model.Temperature,
-            MaxOutputTokens = agent.Model.MaxOutputTokens,
-        };
-
         var provider = modelOverride?.Provider ?? agent.Model.Provider;
         var model = modelOverride?.Model ?? agent.Model.Name;
-        options.ModelId = model;
         activity?.SetTag("eap.model.provider", provider);
+
+        var options = new ChatOptions
+        {
+            ModelId = model,
+            // Les fournisseurs qui refusent "temperature" (Claude récents) ne la reçoivent pas.
+            Temperature = clients.SupportsTemperature(provider) ? agent.Model.Temperature : null,
+            MaxOutputTokens = agent.Model.MaxOutputTokens,
+        };
 
         var started = Stopwatch.GetTimestamp();
         ChatResponse response;
