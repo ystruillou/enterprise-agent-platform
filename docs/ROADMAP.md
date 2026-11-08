@@ -29,6 +29,7 @@ et acquérir l'expérience Google Cloud et Gemini Enterprise.
 ## Semaine 4 : déploiement Google Cloud
 - [ ] Projet GCP, budget et alertes, comptes de service à moindre privilège
 - [ ] Gemini via **Vertex AI** (authentification IAM, pas de clé) en plus d'AI Studio
+- [ ] Claude sans clé statique : fédération d'identité (Cloud Run et GitHub Actions vers l'API Anthropic), comparée à Claude via Vertex AI
 - [ ] Cloud Run, Secret Manager, Cloud Logging et Cloud Trace
 - [ ] Authentification (IAP ou OIDC) qui remplace l'en-tête `X-User-Id`
 - [ ] Déploiement continu depuis GitHub Actions (Workload Identity Federation)
