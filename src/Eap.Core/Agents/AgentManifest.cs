@@ -16,6 +16,7 @@ public sealed class AgentManifest
     public AgentModel Model { get; set; } = new();
     public string PromptFile { get; set; } = "system.md";
     public string? KnowledgeDir { get; set; }
+    public AgentRetrieval Retrieval { get; set; } = new();
     public AgentBudget Budget { get; set; } = new();
     public AgentEvaluation Evaluation { get; set; } = new();
 
@@ -54,6 +55,22 @@ public sealed class AgentModel
     public string Name { get; set; } = "fake-model";
     public float Temperature { get; set; } = 0.2f;
     public int MaxOutputTokens { get; set; } = 800;
+}
+
+/// <summary>Stratégie de recherche documentaire (RAG) de l'agent.</summary>
+public sealed class AgentRetrieval
+{
+    public Knowledge.RetrievalMode Mode { get; set; } = Knowledge.RetrievalMode.Keyword;
+    /// <summary>Fournisseur des embeddings, indépendant de celui du chat (Anthropic n'en propose pas).</summary>
+    public string EmbeddingProvider { get; set; } = "gemini";
+    /// <summary>Modèle d'embeddings, en version figée : changer de modèle impose de réindexer et de réévaluer.</summary>
+    public string EmbeddingModel { get; set; } = "gemini-embedding-2";
+    /// <summary>Taille des vecteurs (null = taille native du modèle). Plus petit = index plus léger.</summary>
+    public int? Dimensions { get; set; }
+    /// <summary>Nombre d'extraits transmis au modèle.</summary>
+    public int Top { get; set; } = 3;
+    /// <summary>Similarité cosinus minimale : en dessous, l'extrait est jugé hors sujet (calibrée sur le jeu d'évaluation).</summary>
+    public double MinSimilarity { get; set; }
 }
 
 public sealed class AgentBudget

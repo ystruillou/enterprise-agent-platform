@@ -83,7 +83,7 @@ public sealed class ModelProviderException : Exception
 public sealed class AgentRunner(
     ChatClientFactory clients,
     IUsageLedger ledger,
-    Func<AgentManifest, KnowledgeBase> knowledgeFor,
+    Func<AgentManifest, IKnowledgeRetriever> knowledgeFor,
     TimeProvider? time = null,
     ModelOverride? modelOverride = null)
 {
@@ -104,7 +104,10 @@ public sealed class AgentRunner(
         activity?.SetTag("eap.agent.status", agent.Status.ToString());
         activity?.SetTag("eap.user.id", userId);
 
-        var chunks = knowledgeFor(agent).Search(question);
+        var retrieval = await knowledgeFor(agent).SearchAsync(question, ct);
+        var chunks = retrieval.Chunks;
+        activity?.SetTag("eap.retrieval.mode", retrieval.Mode.ToString());
+        activity?.SetTag("eap.retrieval.degraded", retrieval.Degraded);
         // Un SEUL message système : la couche compatible OpenAI de Gemini ne conserve que le dernier
         // message système, ce qui faisait disparaître les règles de l'agent (constaté le 2026-11-08).
         var messages = new List<ChatMessage>

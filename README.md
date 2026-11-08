@@ -15,12 +15,15 @@ multi-modèles (Gemini, Claude, GPT, Qwen), traçable, maîtrisée en coûts et 
 | **Gouvernance** | Chaque agent a une **fiche** versionnée (`agents/*/agent.yaml`) : finalité, responsables, statut de cycle de vie, risque AI Act, données personnelles, budget, seuil d'évaluation. Elle est validée au démarrage |
 | **Traçabilité** | OpenTelemetry (conventions `gen_ai.*`), export OTLP vers Langfuse, Cloud Trace ou Jaeger. Le contenu des prompts n'est **pas** journalisé par défaut (RGPD) |
 | **FinOps** | Coût calculé à chaque appel, agrégé par agent et par modèle, plafond quotidien par agent et quota par utilisateur |
+| **RAG** | Recherche par mots-clés, sémantique ou hybride (fusion RRF), choisie dans la fiche ; seuil de similarité calibré ; repli automatique sur les mots-clés si les embeddings sont indisponibles |
 | **Qualité** | [Cadre d'évaluation](evals/README.md) : jeux de test, contrôles déterministes (dont la détection des **sources inventées**), modèle juge, seuil de passage en production inscrit dans la fiche et appliqué en CI |
 | **Sécurité** | Aucune clé dans le code (variables d'environnement, puis Secret Manager), validation des entrées *(IAM et IAP en semaine 4)* |
 
-## Premier résultat : évaluation de l'agent SAV sur deux modèles
+## Résultats d'évaluation de l'agent SAV
 
-22 cas de test, seuil de passage en production à 85 % (détails et enseignements dans [docs/JOURNAL.md](docs/JOURNAL.md)) :
+22 cas de test, seuil de passage en production à 85 % (détails et enseignements dans [docs/JOURNAL.md](docs/JOURNAL.md)).
+
+**Comparaison de modèles** (recherche par mots-clés, 1 passage) :
 
 | | `gemini-3.5-flash-lite` | `claude-haiku-5-5` |
 |---|---|---|
@@ -29,7 +32,16 @@ multi-modèles (Gemini, Claude, GPT, Qwen), traçable, maîtrisée en coûts et 
 | Latence médiane | 0,6 s | 1,7 s |
 | Coût des 22 cas | 0,0068 $ | 0,0048 $ |
 
-Les deux échecs communs viennent de la recherche documentaire, pas des modèles : c'est la prochaine amélioration, mesurée sur le même jeu de test.
+**Amélioration de la recherche** (Gemini, même prompt, mêmes cas) :
+
+| | Mots-clés | Hybride (embeddings + mots-clés), 3 passages |
+|---|---|---|
+| Sections attendues retrouvées | 13/16 | 16/16 |
+| Réponses factuelles justes | 14/16 | 48/48 |
+| Score | 77 % ❌ | 82 % ❌ |
+
+La recherche ne cause plus aucun échec. Ceux qui restent sont des sources inventées par Gemini sur des questions
+sans réponse documentaire : prochaine étape, un garde-fou de sortie.
 
 ## Architecture
 
@@ -38,7 +50,7 @@ Les deux échecs communs viennent de la recherche documentaire, pas des modèles
  Client ──▶ │ /agents (registre)   /agents/{id}/chat   /finops/usage   /health │
             └──────────┬───────────────────────────────────────────────────────┘
                        ▼
-            AgentRunner : garde-fous FinOps → recherche de contexte (RAG) → appel modèle → registre de consommation
+            AgentRunner : garde-fous FinOps → recherche hybride (RAG) → appel modèle → registre de consommation
                        │                                         │
                        ▼                                         ▼
             ChatClientFactory ── IChatClient instrumenté ──▶ Gemini · Claude · GPT · Qwen · fake
@@ -56,7 +68,7 @@ Les deux échecs communs viennent de la recherche documentaire, pas des modèles
 Prérequis : SDK .NET 10.
 
 ```bash
-dotnet test                          # 51 tests, aucun appel payant
+dotnet test                          # 60 tests, aucun appel payant
 dotnet run --project src/Eap.Api     # http://localhost:5xxx
 ```
 

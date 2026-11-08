@@ -50,6 +50,20 @@ public sealed record Expectations
     public bool Escalate { get; init; }
     /// <summary>Citation de source : obligatoire pour une réponse factuelle, facultative sinon (mais jamais inventée).</summary>
     public SourceRequirement Source { get; init; } = SourceRequirement.Required;
+    /// <summary>
+    /// Sections que la recherche documentaire doit retrouver (début du titre ; « A|B » = l'une ou l'autre).
+    /// Mesure la recherche indépendamment du modèle : un modèle ne peut pas citer un fait qu'il n'a pas reçu.
+    /// </summary>
+    public List<string> Context { get; init; } = [];
+
+    /// <summary>Toutes les sections attendues figurent-elles parmi les titres retrouvés ? null si le cas n'en attend aucune.</summary>
+    public bool? ContextFound(IEnumerable<string> retrievedTitles)
+    {
+        if (Context.Count == 0) return null;
+        var titles = retrievedTitles.Select(ResponseChecks.Normalize).ToList();
+        return Context.All(label => label.Split('|').Select(ResponseChecks.Normalize)
+            .Any(alt => titles.Any(t => t.StartsWith(alt.Trim()))));
+    }
 }
 
 public enum SourceRequirement { Required, Optional }

@@ -23,9 +23,26 @@ Le **score** est le taux de cas réussis.
 | `escalate` | Le numéro du service client est donné | Escalade vers un humain quand l'agent ne sait pas |
 | **source citée** | La ligne « Source : » existe (si exigée) et ne cite **que des documents réels** | Traçabilité ; une source inventée est un défaut grave |
 | longueur | 6 phrases au plus (le prompt en demande 5) | Respect des consignes de format |
+| réponse complète | La réponse n'a pas été coupée par le plafond de tokens | Les modèles qui raisonnent consomment ce plafond avant de répondre |
 | **juge** | Note de 1 à 5 par un autre modèle, à partir des documents et des règles | Ce que les contrôles mécaniques ne voient pas |
 
 Les comparaisons ignorent les accents, la casse, le gras Markdown et le séparateur décimal (`39.90` = `39,90`).
+
+## Évaluer la recherche séparément
+
+Un modèle ne peut pas citer un fait qu'il n'a pas reçu. Chaque cas factuel déclare donc les sections que la recherche
+documentaire doit lui transmettre (`expect.context`, début du titre, `A|B` pour l'une ou l'autre). Deux mesures en découlent :
+
+- **en campagne complète** : le rapport indique les cas où le contexte attendu manquait. Un échec avec contexte manquant
+  vient de la recherche, pas du modèle ;
+- **en recherche seule** (`--retrieval-only`) : aucun appel au modèle de chat, donc rapide et quasi gratuit. L'outil
+  affiche le **rappel** (questions qui reçoivent les bonnes sections), le **bruit** (contexte envoyé pour une question
+  hors sujet) et la **similarité brute**, qui sert à calibrer `retrieval.min_similarity`.
+
+```powershell
+dotnet run --project src/Eap.Evals -- --agent sav-produit --retrieval-only --retrieval keyword
+dotnet run --project src/Eap.Evals -- --agent sav-produit --retrieval-only --retrieval hybrid
+```
 
 ## Catégories de cas
 
@@ -40,6 +57,8 @@ incident** en production : tout défaut constaté devient un cas de test, pour q
 ```json
 {"id":"esc-03","category":"piege","question":"Quel est le prix du grille-pain Kerlenn Toast ?",
  "expect":{"escalate":true,"none":["€"],"source":"optional"}}
+{"id":"mul-01","category":"multi","question":"La batterie de rechange de l'aspirateur coûte combien, et la garantie de la cafetière pro dure combien de temps ?",
+ "expect":{"all":["49,90"],"any":[["5 ans","cinq ans"]],"context":["Aspirateur","Cafetière"]}}
 ```
 
 ## Lancer une évaluation
@@ -63,4 +82,9 @@ de bloquer une modification. Le rapport Markdown est écrit dans `evals/reports/
 - **Seuil défini par le métier dans la fiche**, pas par l'équipe technique après coup.
 - **Toute modification réévaluée** : prompt, base de connaissances, changement ou mise à jour de modèle
   (les alias de modèle dérivent : voir `docs/JOURNAL.md`).
-- **Répétition des cas** (`--repeat`) : un modèle n'est pas parfaitement déterministe.
+- **Répétition des cas** (`--repeat`) : un modèle n'est pas parfaitement déterministe. Un score mesuré une seule fois,
+  juste au-dessus du seuil, ne prouve rien.
+- **Une seule variable à la fois** : pour mesurer un changement de recherche, même modèle, même prompt, même jeu de test
+  (`--retrieval` force la stratégie sans modifier la fiche).
+- **Évaluer l'évaluateur** : chaque échec est relu. Un contrôle ou une étiquette ne se corrige que s'il est faux,
+  jamais pour faire passer un modèle, et la correction est consignée dans `docs/JOURNAL.md`.

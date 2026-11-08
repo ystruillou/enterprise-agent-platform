@@ -1,7 +1,7 @@
 # Fiche agent — alimente le registre des agents (cf. governance/)
 id: sav-produit
 name: Assistant SAV produit
-version: 0.1.0
+version: 0.2.0          # 0.2.0 : recherche hybride (embeddings) au lieu des mots-clés
 status: pilot              # idea | design | pilot | production | retired
 purpose: >
   Répondre aux questions des clients de l'enseigne (fictive) Maison Kerlenn sur les produits,
@@ -23,6 +23,15 @@ model:
   max_output_tokens: 1500   # inclut le raisonnement interne des modèles qui "réfléchissent" (Claude) : 600 tronquait
 prompt_file: system.md
 knowledge_dir: knowledge
+retrieval:
+  # Mesuré le 2026-11-08 (evals --retrieval-only), sections attendues retrouvées : mots-clés 13/16, sémantique 15/16,
+  # hybride 16/16 (la question à deux sujets, mul-01, n'est couverte qu'en hybride).
+  mode: hybrid             # keyword | semantic | hybrid
+  embedding_provider: gemini
+  embedding_model: gemini-embedding-2
+  dimensions: 768
+  top: 3
+  min_similarity: 0.50     # questions documentées >= 0,55 ; « recette de crêpes » 0,48, « je parle à un humain ? » 0,47
 budget:
   daily_usd: 2.0
   max_requests_per_user_per_day: 30

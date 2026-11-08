@@ -13,6 +13,7 @@ public class ApiTests(WebApplicationFactory<Program> factory) : IClassFixture<We
         {
             b.UseSetting("Platform:AgentsPath", CoreTests.AgentsRoot);
             b.UseSetting("Platform:ProviderOverride", "fake");
+            b.UseSetting("Platform:EmbeddingProviderOverride", "fake"); // aucun appel réel, même si une clé est présente
         })
         .CreateClient();
 
@@ -34,7 +35,7 @@ public class ApiTests(WebApplicationFactory<Program> factory) : IClassFixture<We
         response.EnsureSuccessStatusCode();
         using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
 
-        Assert.Contains("39,90", doc.RootElement.GetProperty("answer").GetString());
+        Assert.True(doc.RootElement.GetProperty("answer").GetString()!.Contains("39,90"), doc.RootElement.ToString());
         Assert.Equal("fake", doc.RootElement.GetProperty("usage").GetProperty("provider").GetString());
         Assert.False(string.IsNullOrEmpty(doc.RootElement.GetProperty("traceId").GetString()));
 

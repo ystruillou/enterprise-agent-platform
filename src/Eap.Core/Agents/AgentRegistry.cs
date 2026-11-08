@@ -59,6 +59,11 @@ public sealed class AgentRegistry
             yield return "un agent en production doit avoir un jeu d'évaluation";
         if (m.Risk.AiAct == AiActRiskLevel.High && m.Status == AgentStatus.Production && string.IsNullOrWhiteSpace(m.Risk.Notes))
             yield return "un agent à haut risque (AI Act) doit documenter ses mesures dans risk.notes";
+        if (m.Retrieval.Top is < 1 or > 20) yield return "retrieval.top doit être compris entre 1 et 20";
+        if (m.Retrieval.MinSimilarity is < 0 or >= 1) yield return "retrieval.min_similarity doit être compris entre 0 et 1";
+        if (m.Retrieval.Mode != Knowledge.RetrievalMode.Keyword
+            && (string.IsNullOrWhiteSpace(m.Retrieval.EmbeddingProvider) || string.IsNullOrWhiteSpace(m.Retrieval.EmbeddingModel)))
+            yield return "la recherche sémantique exige retrieval.embedding_provider et retrieval.embedding_model";
         if (!string.IsNullOrEmpty(m.BaseDirectory) && !File.Exists(Path.Combine(m.BaseDirectory, m.PromptFile)))
             yield return $"prompt_file introuvable : {m.PromptFile}";
     }

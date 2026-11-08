@@ -10,6 +10,8 @@ using Microsoft.Extensions.Configuration;
 //   dotnet run --project src/Eap.Evals -- --agent sav-produit
 //        [--provider anthropic --model claude-haiku-5-5]   force un modèle (sinon celui de la fiche)
 //        [--judge gemini:gemini-3.6-flash]                  ajoute un modèle juge
+//        [--retrieval keyword|semantic|hybrid]             force la stratégie de recherche (sinon celle de la fiche)
+//        [--retrieval-only]                                 mesure la recherche seule, sans appeler le modèle de chat
 //        [--repeat 2] [--delay-ms 1000] [--no-gate] [--report-dir evals/reports]
 CultureInfo.CurrentCulture = CultureInfo.InvariantCulture;
 var opt = EvalOptions.Parse(args);
@@ -32,8 +34,14 @@ var kb = agent.KnowledgeDir is { Length: > 0 } dir ? KnowledgeBase.LoadFrom(Path
 var known = new KnownSources(kb.Chunks.Select(c => c.Source), kb.Chunks.Select(c => c.Title));
 
 var clients = new ChatClientFactory(providers);
+var retrievalMode = opt.Retrieval ?? agent.Retrieval.Mode;
+var retriever = new KnowledgeRetrieverFactory(clients, modeOverride: retrievalMode).For(agent);
+
+if (opt.RetrievalOnly)
+    return await RetrievalReport.RunAsync(agent, cases, kb, retriever, retrievalMode);
+
 var modelOverride = opt.Provider is null ? null : new ModelOverride(opt.Provider, opt.Model ?? throw new ArgumentException("--model est requis avec --provider"));
-var runner = new AgentRunner(clients, new InMemoryUsageLedger(), _ => kb, modelOverride: modelOverride);
+var runner = new AgentRunner(clients, new InMemoryUsageLedger(), _ => retriever, modelOverride: modelOverride);
 
 LlmJudge? judge = null;
 if (opt.Judge is { } j)
@@ -45,7 +53,7 @@ if (opt.Judge is { } j)
 
 var provider = modelOverride?.Provider ?? agent.Model.Provider;
 var model = modelOverride?.Model ?? agent.Model.Name;
-Console.WriteLine($"Évaluation de {agent.Id} v{agent.Version} sur {provider}/{model} : {cases.Count} cas × {opt.Repeat}" +
+Console.WriteLine($"Évaluation de {agent.Id} v{agent.Version} sur {provider}/{model}, recherche {retrievalMode} : {cases.Count} cas × {opt.Repeat}" +
                   (judge is null ? "" : $", juge {judge.Label}"));
 
 var results = new List<CaseResult>();
@@ -65,7 +73,8 @@ for (var run = 1; run <= opt.Repeat; run++)
             try { verdict = await WithRetry(() => judge.EvaluateAsync(evalCase.Question, reply.Answer)); }
             catch (ModelProviderException ex) { verdict = new JudgeVerdict(null, $"juge indisponible (HTTP {ex.HttpStatus})", 0m); }
         }
-        result = new CaseResult(evalCase, run, reply.Answer, checks, verdict, reply.Usage, null);
+        var contextFound = evalCase.Expect.ContextFound(reply.Sources.Select(s => s.Split(" › ", 2)[^1]));
+        result = new CaseResult(evalCase, run, reply.Answer, checks, verdict, reply.Usage, null, contextFound);
     }
     catch (Exception ex) when (ex is ModelProviderException or QuotaExceededException)
     {
@@ -73,16 +82,18 @@ for (var run = 1; run <= opt.Repeat; run++)
     }
     results.Add(result);
     Console.WriteLine($"  {(result.Passed ? "OK  " : "ÉCHEC")} {evalCase.Id,-8} {evalCase.Category,-15} " +
+                      (result.ContextFound == false ? "[contexte manquant] " : "") +
                       (result.Passed ? "" : string.Join(" ; ", result.FailureReasons)));
     if (opt.DelayMs > 0) await Task.Delay(opt.DelayMs);
 }
 
-var summary = EvalSummary.From(agent, provider, model, judge?.Label, results);
+var summary = EvalSummary.From(agent, provider, model, judge?.Label, retrievalMode.ToString().ToLowerInvariant(), results);
 var reportPath = ReportWriter.Write(Path.Combine(root, opt.ReportDir), summary);
 
 Console.WriteLine();
 Console.WriteLine($"Score : {summary.Score:P0} ({summary.Passed}/{summary.Total})  seuil : {agent.Evaluation.MinScore:P0}  →  " +
                   (summary.MeetsThreshold ? "VALIDÉ" : "REFUSÉ"));
+Console.WriteLine($"Recherche : sections attendues retrouvées {summary.ContextRecall.Found}/{summary.ContextRecall.Labeled}");
 Console.WriteLine($"Coût : agent {summary.AgentCostUsd:0.######} $, juge {summary.JudgeCostUsd:0.######} $ · latence médiane {summary.MedianLatencyMs:0} ms");
 Console.WriteLine($"Rapport : {Path.GetRelativePath(root, reportPath)}");
 
@@ -111,7 +122,8 @@ static string FindRepoRoot()
     throw new DirectoryNotFoundException("Racine du dépôt introuvable (dossiers agents/ et evals/).");
 }
 
-internal sealed record EvalOptions(string Agent, string? Provider, string? Model, string? Judge, int Repeat, int DelayMs, bool NoGate, string ReportDir)
+internal sealed record EvalOptions(string Agent, string? Provider, string? Model, string? Judge, int Repeat, int DelayMs, bool NoGate, string ReportDir,
+    RetrievalMode? Retrieval, bool RetrievalOnly)
 {
     public static EvalOptions Parse(string[] args)
     {
@@ -122,6 +134,8 @@ internal sealed record EvalOptions(string Agent, string? Provider, string? Model
             int.TryParse(Get("--repeat"), out var r) && r > 0 ? r : 1,
             int.TryParse(Get("--delay-ms"), out var d) && d >= 0 ? d : 1000,
             args.Contains("--no-gate"),
-            Get("--report-dir") ?? Path.Combine("evals", "reports"));
+            Get("--report-dir") ?? Path.Combine("evals", "reports"),
+            Get("--retrieval") is { } m ? Enum.Parse<RetrievalMode>(m, ignoreCase: true) : null,
+            args.Contains("--retrieval-only"));
     }
 }

@@ -27,7 +27,10 @@ et acquérir l'expérience Google Cloud et Gemini Enterprise.
 - [x] Modèle juge (facultatif), rapport Markdown, code de sortie selon le seuil
 - [x] Workflow `evals.yml` qui bloque une PR sous le seuil (actif dès que les secrets d'API sont configurés)
 - [x] Première campagne Gemini / Claude : voir [JOURNAL.md](JOURNAL.md)
-- [ ] Recherche sémantique (embeddings), mesurée avant et après sur le jeu de test
+- [x] Recherche sémantique et hybride (embeddings Gemini, fusion RRF), mesurée avant et après sur le jeu de test
+- [x] Évaluation de la recherche seule (`--retrieval-only`) : rappel, bruit, calibrage du seuil de similarité
+- [ ] Garde-fou de sortie : vérifier la ligne « Source : » avant de répondre (les sources inventées sont le défaut restant de Gemini)
+- [ ] Base vectorielle persistante (pgvector ou Vertex AI Vector Search) quand la base dépassera quelques centaines de sections
 - [ ] Juge sur un quota payant ou un modèle dédié ; campagnes répétées (`--repeat 3`)
 - [ ] Jeu de test pour l'agent conformité promo
 

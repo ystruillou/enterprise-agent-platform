@@ -9,9 +9,9 @@ public sealed record KnowledgeChunk(string Source, string Title, string Content)
 /// <summary>
 /// Base de connaissances minimale : découpe les fichiers Markdown par titre et
 /// classe les extraits par recouvrement de mots-clés (type BM25 simplifié).
-/// Volontairement simple pour la semaine 1 ; sera remplacée par une recherche vectorielle.
+/// Sert aussi de repli quand la recherche sémantique est indisponible (voir <see cref="SemanticRetriever"/>).
 /// </summary>
-public sealed partial class KnowledgeBase
+public sealed partial class KnowledgeBase : IKnowledgeRetriever
 {
     private static readonly HashSet<string> StopWords =
     [
@@ -43,19 +43,25 @@ public sealed partial class KnowledgeBase
         return kb;
     }
 
-    public IReadOnlyList<KnowledgeChunk> Search(string query, int top = 3)
+    public IReadOnlyList<KnowledgeChunk> Search(string query, int top = 3) =>
+        SearchWithScores(query, top).Select(h => h.Chunk).ToList();
+
+    /// <summary>Extraits classés par nombre de termes de la question qu'ils contiennent (0 = exclu).</summary>
+    public IReadOnlyList<RetrievalHit> SearchWithScores(string query, int top = 3)
     {
         var queryTerms = Tokenize(query).Distinct().ToList();
         if (queryTerms.Count == 0) return [];
 
         return _index
-            .Select(e => (e.Chunk, Score: queryTerms.Count(e.Terms.Contains)))
+            .Select(e => new RetrievalHit(e.Chunk, queryTerms.Count(e.Terms.Contains)))
             .Where(x => x.Score > 0)
             .OrderByDescending(x => x.Score)
             .Take(top)
-            .Select(x => x.Chunk)
             .ToList();
     }
+
+    public Task<RetrievalResult> SearchAsync(string query, CancellationToken ct = default) =>
+        Task.FromResult(new RetrievalResult(SearchWithScores(query), RetrievalMode.Keyword));
 
     private static IEnumerable<KnowledgeChunk> Split(string source, string markdown)
     {
@@ -79,7 +85,7 @@ public sealed partial class KnowledgeBase
             yield return new KnowledgeChunk(source, title, last);
     }
 
-    internal static IEnumerable<string> Tokenize(string text) =>
+    public static IEnumerable<string> Tokenize(string text) =>
         WordRegex().Matches(RemoveDiacritics(text.ToLowerInvariant()))
             .Select(m => m.Value)
             .Where(w => w.Length > 1 && !StopWords.Contains(w))

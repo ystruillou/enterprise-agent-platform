@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using Eap.Core.Agents;
 using Eap.Core.FinOps;
 using Eap.Core.Knowledge;
@@ -23,17 +22,19 @@ builder.Services.AddSingleton(new ChatClientFactory(
 builder.Services.AddSingleton<IUsageLedger, InMemoryUsageLedger>();
 builder.Services.AddSingleton(TimeProvider.System);
 
-var knowledgeCache = new ConcurrentDictionary<string, KnowledgeBase>();
 ModelOverride? modelOverride = builder.Configuration["Platform:ProviderOverride"] is { Length: > 0 } forced
     ? new ModelOverride(forced, builder.Configuration["Platform:ModelOverride"] is { Length: > 0 } m ? m : "fake-model")
     : null;
 
+// Embeddings : "fake" en développement (sans clé), sinon le fournisseur déclaré dans chaque fiche.
+builder.Services.AddSingleton(sp => new KnowledgeRetrieverFactory(
+    sp.GetRequiredService<ChatClientFactory>(),
+    builder.Configuration["Platform:EmbeddingProviderOverride"] is { Length: > 0 } e ? e : null));
+
 builder.Services.AddSingleton(sp => new AgentRunner(
     sp.GetRequiredService<ChatClientFactory>(),
     sp.GetRequiredService<IUsageLedger>(),
-    agent => knowledgeCache.GetOrAdd(agent.Id, _ => agent.KnowledgeDir is { Length: > 0 } dir
-        ? KnowledgeBase.LoadFrom(Path.Combine(agent.BaseDirectory, dir))
-        : KnowledgeBase.Empty),
+    sp.GetRequiredService<KnowledgeRetrieverFactory>().For,
     sp.GetRequiredService<TimeProvider>(),
     modelOverride));
 

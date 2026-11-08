@@ -93,6 +93,46 @@ La relance n'a pas pu se faire : crédits Anthropic épuisés (voir plus bas).
    Anthropic est tombé à zéro, avec un message `invalid_request_error`, le même code qu'une requête mal formée.
    → *FinOps* : surveiller les soldes et les quotas, et alerter avant l'épuisement.
 
+## 2026-11-08 : recherche sémantique et hybride, mesurée avant et après
+
+Même agent, même modèle (`gemini-3.5-flash-lite`), même prompt, mêmes 22 cas : seule la recherche documentaire change.
+
+**Recherche seule** (`--retrieval-only`, sans appel au modèle de chat) : sections attendues transmises au modèle.
+
+| Mots-clés | Sémantique (`gemini-embedding-2`) | Hybride (fusion RRF) |
+|---|---|---|
+| 13/16 | 15/16 | **16/16** |
+
+**Campagne complète :**
+
+| | Mots-clés (avant) | Hybride, 1 passage | Hybride, 3 passages |
+|---|---|---|---|
+| Score | 77 % ❌ | 86 % ✅ | **82 % ❌** (54/66) |
+| Cas factuels et multi-questions | 14/16 | 16/16 | **48/48** |
+| Échecs | 2 recherche + 3 sources inventées | 3 sources inventées | 12 sources inventées |
+
+**Enseignements :**
+
+1. **La recherche hybride a résolu tous les échecs factuels.** « Livré demain » trouve maintenant « Livraison », « renvoyer »
+   trouve « Retours ». Sur 3 passages, 48 réponses factuelles sur 48 sont justes.
+2. **Le sémantique seul rate les questions à deux sujets.** L'embedding de la question fait une moyenne de ses sens :
+   « batterie de l'aspirateur et garantie de la cafetière » ne remonte pas la fiche Cafetière. Les mots-clés la trouvent ;
+   la fusion des deux classements (Reciprocal Rank Fusion) cumule les avantages.
+3. **Un passage unique ment.** 86 % sur un passage, 82 % sur trois : le défaut restant (Gemini invente une source quand il n'en
+   a pas) est aléatoire. Le verdict publié est celui des 3 passages : **refusé**.
+4. **Le défaut restant n'est plus un problème de recherche** : les 12 échecs sont des sources inventées sur des questions sans
+   réponse documentaire (refus, transparence, sécurité). → Prochaine étape : un **garde-fou de sortie** qui vérifie la ligne
+   « Source : » contre la base avant de répondre, plutôt que d'espérer que le modèle obéisse au prompt.
+5. **Le seuil de similarité dépend du modèle d'embeddings.** Calibré à 0,50 pour `gemini-embedding-2` (questions documentées
+   ≥ 0,55, « recette de crêpes » 0,48) ; il est ignoré quand on force un autre générateur (simulé en dev), dont l'échelle diffère.
+   Changer de modèle d'embeddings impose de réindexer **et** de recalibrer.
+6. **J'ai corrigé une étiquette trop permissive.** mul-01 acceptait « Cafetière **ou** Garantie » comme contexte suffisant ; la
+   réponse a montré que sans la fiche Cafetière, le modèle ne relie pas « cafetière pro » à la gamme Pro. La correction a
+   *baissé* le rappel mesuré du sémantique (16 → 15) : c'est ce qui la rend crédible.
+7. **Quotas** : l'offre gratuite des embeddings plafonne à 100 requêtes par minute. Un cache des vecteurs de question évite
+   de revectoriser une question déjà vue (fréquent sur une FAQ). La latence de Gemini a aussi varié de 0,7 s à 5,4 s de médiane
+   selon l'heure : une comparaison de latences ne vaut qu'entre mesures faites au même moment.
+
 ## Coût observé lors du premier branchement
 
 **Coût observé :** 4 questions pour environ 0,0012 $ avec `gemini-3.5-flash-lite`, soit environ 0,0003 $ par réponse et
