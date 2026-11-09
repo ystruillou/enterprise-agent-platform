@@ -6,7 +6,7 @@ name: Deploy
 on:
   push:
     branches: [main]
-    paths: ["src/Eap.Core/**", "src/Eap.Api/**", "agents/**", "Dockerfile", ".github/workflows/deploy.yml"]
+    paths: ["src/Eap.Core/**", "src/Eap.Api/**", "agents/**", "Dockerfile", ".dockerignore", ".github/workflows/deploy.yml"]
   workflow_dispatch:
 
 # Un seul déploiement à la fois ; un déploiement en cours n'est jamais interrompu.

@@ -1,0 +1,14 @@
+# Contexte de construction de l'image (docker build en CI). Même logique que .gcloudignore (Cloud Build).
+# bin/ et obj/ surtout : copiés depuis la machine de build, ils écrasaient la restauration NuGet faite dans l'image
+# (erreur NETSDK1064 au premier déploiement continu, les tests venant de s'exécuter sur le runner).
+**/bin/
+**/obj/
+.git/
+.github/
+tests/
+evals/
+docs/
+infra/
+src/Eap.Evals/
+/*.md
+.env
