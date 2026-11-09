@@ -36,23 +36,36 @@ public sealed class GoogleIapKeySource(HttpClient http, TimeProvider time) : IIa
 {
     public const string JwksUrl = "https://www.gstatic.com/iap/verify/public_key-jwk";
     private static readonly TimeSpan CacheDuration = TimeSpan.FromHours(1);
+    /// <summary>
+    /// Délai minimal entre deux rechargements forcés : sans lui, des jetons portant un identifiant de clé inventé
+    /// provoqueraient un téléchargement des clés à chaque requête (amplification vers Google, latence).
+    /// </summary>
+    public static readonly TimeSpan MinRefreshInterval = TimeSpan.FromMinutes(1);
     private readonly SemaphoreSlim _lock = new(1, 1);
     private IReadOnlyList<SecurityKey> _keys = [];
     private DateTimeOffset _expires = DateTimeOffset.MinValue;
+    private DateTimeOffset _lastFetch = DateTimeOffset.MinValue;
 
     public async Task<IReadOnlyList<SecurityKey>> GetKeysAsync(bool refresh, CancellationToken ct)
     {
-        if (!refresh && time.GetUtcNow() < _expires) return _keys;
+        if (IsFresh(refresh)) return _keys;
         await _lock.WaitAsync(ct);
         try
         {
-            if (!refresh && time.GetUtcNow() < _expires) return _keys;
+            if (IsFresh(refresh)) return _keys;
             var json = await http.GetStringAsync(JwksUrl, ct);
             _keys = new JsonWebKeySet(json).GetSigningKeys().ToList();
-            _expires = time.GetUtcNow() + CacheDuration;
+            _lastFetch = time.GetUtcNow();
+            _expires = _lastFetch + CacheDuration;
             return _keys;
         }
         finally { _lock.Release(); }
+    }
+
+    private bool IsFresh(bool refresh)
+    {
+        var now = time.GetUtcNow();
+        return refresh ? now - _lastFetch < MinRefreshInterval : now < _expires;
     }
 }
 

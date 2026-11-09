@@ -87,6 +87,39 @@ public class IdentityTests(WebApplicationFactory<Program> factory) : IClassFixtu
         Assert.Equal(1, keys.Fetches);
     }
 
+    private sealed class CountingHandler(string jwks) : HttpMessageHandler
+    {
+        public int Calls { get; private set; }
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
+        {
+            Calls++;
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(jwks) });
+        }
+    }
+
+    private sealed class ManualClock : TimeProvider
+    {
+        public DateTimeOffset Now { get; set; } = new(2026, 11, 9, 12, 0, 0, TimeSpan.Zero);
+        public override DateTimeOffset GetUtcNow() => Now;
+    }
+
+    [Fact]
+    public async Task Forced_key_reloads_are_rate_limited()
+    {
+        var handler = new CountingHandler("""{"keys":[]}""");
+        var clock = new ManualClock();
+        var source = new GoogleIapKeySource(new HttpClient(handler), clock);
+
+        await source.GetKeysAsync(refresh: false, default);       // 1er chargement
+        for (var i = 0; i < 50; i++)
+            await source.GetKeysAsync(refresh: true, default);    // rafale de jetons à clé inconnue
+        Assert.Equal(1, handler.Calls);
+
+        clock.Now += GoogleIapKeySource.MinRefreshInterval;       // une minute plus tard, une vraie rotation reste possible
+        await source.GetKeysAsync(refresh: true, default);
+        Assert.Equal(2, handler.Calls);
+    }
+
     // --- Intégration : l'API en mode IAP --------------------------------------------------
 
     private HttpClient IapClient() => factory
