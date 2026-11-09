@@ -33,6 +33,7 @@ et acquérir l'expérience Google Cloud et Gemini Enterprise.
 - [x] Juge arbitre des contrôles par mots-clés (`suspect` + `rubric`) ; juge payant `claude-sonnet-5-5` (0,43 $ pour 66 réponses)
 - [ ] Base vectorielle persistante (pgvector ou Vertex AI Vector Search) quand la base dépassera quelques centaines de sections
 - [x] Campagnes répétées (`--repeat 3`) : le verdict publié est celui des 3 passages
+- [ ] Grille d'évaluation fixe pour le juge (indépendante du prompt de l'agent) : condition pour comparer deux versions d'un prompt
 - [ ] Garde-fou de pertinence : une source réelle mais hors sujet passe le contrôle d'existence (vu par le juge sur esc-02)
 - [ ] Juge moins cher pour la CI (Haiku ou Flash payant), calibré contre Sonnet sur les mêmes réponses
 - [x] Jeu de test de l'agent conformité promo (20 cas, 8 catégories), mode « base entière », limite de longueur propre à chaque fiche

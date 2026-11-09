@@ -365,6 +365,35 @@ signé que **l'application vérifie elle-même** (signature, émetteur, audience
    alloué (quelques centimes par réveil) ou export avant la fin de la réponse (latence).
 5. **Coût de la barrière** : ~0,37 $ par campagne avec juge Sonnet, seulement quand un agent, un jeu de test ou le cœur change.
 
+## 2026-11-09 : tentative d'amélioration du relecteur de conformité, abandonnée
+
+Point de départ : la barrière de qualité est passée à 80 % (seuil 80 %) sur un passage ; les 4 échecs, vus par le juge,
+étaient de vrais défauts (sévérité excessive, prix inversés dans une reformulation, mots inventés).
+
+| Version du prompt | Score (3 passages, juge Sonnet) |
+|---|---|
+| 0.3.0 (en production) | 97 % ; puis 90 % et 80 % sur un passage |
+| 0.4.0, 1re formulation (applicabilité, critère du « bloquant », reformulation fidèle) | 83 % |
+| 0.4.0, 2e formulation (plus de points spéculatifs, pas de doublon) | **75 %, refusé** |
+
+**Décision : 0.4.0 n'est pas déployée, retour à 0.3.0.**
+
+**Enseignements :**
+
+1. **Le juge note l'agent avec le prompt de l'agent.** Il reçoit la consigne système comme liste des règles à vérifier :
+   chaque règle ajoutée devient un critère de plus. La plupart des échecs de 0.4.0 violent des règles qui n'existaient
+   pas en 0.3.0. Les deux scores ne se comparent donc pas : l'étalon change avec la version mesurée.
+2. **Une formulation ambiguë trompe aussi le juge.** « Conserve les faits » a conduit le juge à pénaliser une reformulation
+   qui retirait, à juste titre, une allégation non conforme.
+3. **Un petit modèle n'applique pas une longue liste de règles.** Claude Haiku en viole davantage à mesure qu'elles
+   s'allongent : la première correction a supprimé les défauts visés, mais en a créé d'autres (points spéculatifs,
+   sévérité sous-estimée, doublons).
+4. **À corriger côté méthode avant toute nouvelle itération** : une grille d'évaluation fixe pour le juge, versionnée avec
+   le jeu de test et indépendante du prompt ; puis comparer les versions avec la même grille. Pistes côté agent :
+   exemples plutôt que règles, ou modèle plus capable pour cette tâche (coût à mesurer).
+
+Coût de la tentative : ~1,35 $ (deux campagnes de 3 passages).
+
 ## Coût observé lors du premier branchement
 
 **Coût observé :** 4 questions pour environ 0,0012 $ avec `gemini-3.5-flash-lite`, soit environ 0,0003 $ par réponse et
