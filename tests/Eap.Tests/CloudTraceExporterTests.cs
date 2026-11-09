@@ -49,7 +49,7 @@ public class CloudTraceExporterTests
         if (httpClientFactoryRegistered) services.AddHttpClient<SomeTypedClient>();
         services.AddOpenTelemetry().WithTracing(t => t
             .AddSource(source.Name)
-            .AddCloudTraceExporter(services, new FakeCredential(), google));
+            .AddCloudTraceExporter(new FakeCredential(), google));
 
         await using var provider = services.BuildServiceProvider();
         var tracer = provider.GetRequiredService<TracerProvider>();
@@ -59,5 +59,18 @@ public class CloudTraceExporterTests
         var export = Assert.Single(google.Requests);
         Assert.Equal(CloudTraceExporter.Endpoint, export.Url);
         Assert.Equal("Bearer jeton-de-test", export.Authorization);
+    }
+
+    [Theory]
+    [InlineData("https://telemetry.googleapis.com/v1/traces", true)]
+    [InlineData("https://cloud.langfuse.com/api/public/otel/v1/traces", false)] // autre destination OTLP
+    [InlineData("http://telemetry.googleapis.com/v1/traces", false)]             // pas en clair
+    [InlineData("https://telemetry.googleapis.com.attaquant.example/v1/traces", false)]
+    public async Task The_Google_token_is_only_sent_to_Cloud_Trace(string url, bool expectToken)
+    {
+        var target = new RecordingHandler();
+        using var client = new HttpClient(new GoogleAuthHandler(new FakeCredential(), target));
+        await client.PostAsync(url, new ByteArrayContent([]));
+        Assert.Equal(expectToken, Assert.Single(target.Requests).Authorization is not null);
     }
 }

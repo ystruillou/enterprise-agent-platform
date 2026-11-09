@@ -95,7 +95,7 @@ builder.Services.AddOpenTelemetry()
         // Cloud Trace : point d'entrée OTLP de Google, authentifié par le compte de service de Cloud Run (aucune clé).
         // Le contenu des prompts et des réponses n'est pas tracé (EnableSensitiveData = false, voir ChatClientFactory).
         if (cloudTrace)
-            t.AddCloudTraceExporter(builder.Services, GoogleCredential.GetApplicationDefault().CreateScoped(GoogleAuthHandler.Scope));
+            t.AddCloudTraceExporter(GoogleCredential.GetApplicationDefault().CreateScoped(GoogleAuthHandler.Scope));
         // Autre destination (Langfuse, Jaeger…) : activée seulement si OTEL_EXPORTER_OTLP_ENDPOINT est défini.
         if (!string.IsNullOrEmpty(builder.Configuration["OTEL_EXPORTER_OTLP_ENDPOINT"]))
             t.AddOtlpExporter();

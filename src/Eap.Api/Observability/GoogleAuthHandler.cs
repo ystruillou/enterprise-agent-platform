@@ -49,9 +49,19 @@ public sealed class GoogleAuthHandler : DelegatingHandler
         catch (Exception ex) when (ex is not OperationCanceledException) { throw Failure(ex); }
     }
 
-    private async Task AuthorizeAsync(HttpRequestMessage request, CancellationToken ct) =>
+    /// <summary>
+    /// Le jeton du compte de service n'est joint qu'aux requêtes HTTPS vers Cloud Trace : si ce gestionnaire se retrouvait
+    /// dans un autre client (autre exportateur, autre destination), il ne divulguerait pas d'identifiants.
+    /// </summary>
+    public static bool IsGoogleTraceEndpoint(Uri? uri) =>
+        uri is { Scheme: "https" } && string.Equals(uri.Host, CloudTraceExporter.Endpoint.Host, StringComparison.OrdinalIgnoreCase);
+
+    private async Task AuthorizeAsync(HttpRequestMessage request, CancellationToken ct)
+    {
+        if (!IsGoogleTraceEndpoint(request.RequestUri)) return;
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer",
-            await _credential.GetAccessTokenForRequestAsync(request.RequestUri?.ToString(), ct));
+            await _credential.GetAccessTokenForRequestAsync(request.RequestUri!.ToString(), ct));
+    }
 
     private static HttpResponseMessage Report(HttpRequestMessage request, HttpResponseMessage response)
     {
@@ -70,27 +80,23 @@ public sealed class GoogleAuthHandler : DelegatingHandler
 public static class CloudTraceExporter
 {
     public static readonly Uri Endpoint = new("https://telemetry.googleapis.com/v1/traces");
-
-    /// <summary>Nom du client HTTP qu'OpenTelemetry demande à IHttpClientFactory quand celui-ci est enregistré.</summary>
-    public const string HttpClientName = "OtlpTraceExporter";
+    public const string OptionsName = "cloudtrace";
 
     /// <summary>
-    /// Export OTLP vers Cloud Trace, authentifié. L'authentification est posée sur les deux chemins par lesquels
-    /// l'exportateur obtient son client HTTP : sa propre fabrique, et le client nommé d'IHttpClientFactory (enregistré
-    /// en production pour les clés IAP). Testé dans les deux configurations (CloudTraceExporterTests).
+    /// Export OTLP vers Cloud Trace, authentifié par une fabrique de client propre à CET exportateur. Pas de client nommé
+    /// partagé (« OtlpTraceExporter ») : tous les exportateurs OTLP l'utiliseraient, et le jeton Google partirait vers une
+    /// autre destination configurée (Langfuse…). Testé avec et sans IHttpClientFactory (CloudTraceExporterTests).
     /// </summary>
     /// <param name="primaryHandler">Pour les tests : remplace l'appel réseau.</param>
-    public static TracerProviderBuilder AddCloudTraceExporter(this TracerProviderBuilder tracing, IServiceCollection services,
-        ICredential credential, HttpMessageHandler? primaryHandler = null)
-    {
-        var client = services.AddHttpClient(HttpClientName).AddHttpMessageHandler(() => new GoogleAuthHandler(credential));
-        if (primaryHandler is not null) client.ConfigurePrimaryHttpMessageHandler(() => primaryHandler);
-
-        return tracing.AddOtlpExporter(o =>
+    public static TracerProviderBuilder AddCloudTraceExporter(this TracerProviderBuilder tracing,
+        ICredential credential, HttpMessageHandler? primaryHandler = null) =>
+        // Options NOMMÉES : la configuration Google (destination, fabrique authentifiée) ne s'applique qu'à cet exportateur,
+        // et les en-têtes prévus pour une autre destination (OTEL_EXPORTER_OTLP_HEADERS) ne partent pas chez Google.
+        tracing.AddOtlpExporter(OptionsName, o =>
         {
+            o.Headers = null;
             o.Endpoint = Endpoint;
             o.Protocol = OtlpExportProtocol.HttpProtobuf;
             o.HttpClientFactory = () => new HttpClient(new GoogleAuthHandler(credential, primaryHandler ?? new HttpClientHandler()));
         });
-    }
 }
