@@ -302,6 +302,24 @@ Voir [DEPLOIEMENT.md](DEPLOIEMENT.md). API privée à Paris, clés dans Secret M
    intervenu (`eap.guardrail.actions`) : la citation d'origine n'est visible qu'en évaluation. À trancher : la conserver,
    pour les administrateurs, dans un journal d'audit protégé ? Cela impose de traiter la question RGPD.
 
+## 2026-11-09 : déploiement continu, sans clé chez GitHub
+
+À chaque push sur `main` touchant l'API ou les fiches agents : tests, image étiquetée par le commit, déploiement Cloud Run,
+test de santé (2 agents chargés, **403 sans jeton**). 1 min 19 s de bout en bout.
+
+1. **Fédération d'identité plutôt que clé de compte de service.** GitHub présente un jeton OIDC ; Google ne l'accepte que
+   pour ce dépôt (identifiant numérique) et la branche `main`. Rien à faire tourner, rien à faire fuiter.
+2. **Le filtre de sécurité de Claude Code a bloqué les attributions de droits IAM** : la décision a été rendue au
+   propriétaire du projet, sous forme d'un script relu et exécuté par lui (`infra/grant-github-deployer.ps1`).
+   Premier essai du script raté par ma faute : arguments passés en un seul bloc à `gcloud`. Corrigé, puis vérifié sur une
+   commande en lecture seule avant de le rendre.
+3. **Premier déploiement en échec, cause classique** : les tests laissent `bin/` et `obj/` sur le runner, et le
+   `Dockerfile` les copiait par-dessus la restauration NuGet de l'image (NETSDK1064). Le déploiement manuel passait
+   grâce à `.gcloudignore` ; `docker build` lit `.dockerignore`, qui manquait.
+4. **Revue de sécurité automatique** : actions tierces épinglées sur un commit exact (le job détient les droits de
+   déploiement), Dependabot pour les mettre à jour. Avertissement restant : ces versions ciblent Node.js 20, déprécié
+   par GitHub ; les mises à jour majeures proposées par Dependabot le régleront.
+
 ## Coût observé lors du premier branchement
 
 **Coût observé :** 4 questions pour environ 0,0012 $ avec `gemini-3.5-flash-lite`, soit environ 0,0003 $ par réponse et
