@@ -7,7 +7,6 @@ using Eap.Core.Knowledge;
 using Eap.Core.Models;
 using Google.Apis.Auth.OAuth2;
 using Google.Cloud.Firestore;
-using OpenTelemetry.Exporter;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 
@@ -96,13 +95,7 @@ builder.Services.AddOpenTelemetry()
         // Cloud Trace : point d'entrée OTLP de Google, authentifié par le compte de service de Cloud Run (aucune clé).
         // Le contenu des prompts et des réponses n'est pas tracé (EnableSensitiveData = false, voir ChatClientFactory).
         if (cloudTrace)
-            t.AddOtlpExporter("cloudtrace", o =>
-            {
-                o.Endpoint = new Uri("https://telemetry.googleapis.com/v1/traces");
-                o.Protocol = OtlpExportProtocol.HttpProtobuf;
-                var credential = GoogleCredential.GetApplicationDefault().CreateScoped(GoogleAuthHandler.Scope);
-                o.HttpClientFactory = () => new HttpClient(new GoogleAuthHandler(credential));
-            });
+            t.AddCloudTraceExporter(builder.Services, GoogleCredential.GetApplicationDefault().CreateScoped(GoogleAuthHandler.Scope));
         // Autre destination (Langfuse, Jaeger…) : activée seulement si OTEL_EXPORTER_OTLP_ENDPOINT est défini.
         if (!string.IsNullOrEmpty(builder.Configuration["OTEL_EXPORTER_OTLP_ENDPOINT"]))
             t.AddOtlpExporter();

@@ -3,29 +3,22 @@ using System.Diagnostics.Tracing;
 namespace Eap.Api.Observability;
 
 /// <summary>
-/// Recopie dans les journaux (stderr, donc Cloud Logging) les avertissements et erreurs internes d'OpenTelemetry,
-/// émis sur EventSource et invisibles sinon. Sans lui, un export refusé (droits, quota, réponse partielle) fait
-/// simplement disparaître les traces. Niveau Warning et plus : pas de bruit en fonctionnement normal.
+/// Signale dans les journaux (stderr, donc Cloud Logging) les erreurs de l'exportateur OTLP, émises sur EventSource et
+/// invisibles sinon : sans lui, un export refusé fait simplement disparaître les traces (constaté au premier déploiement).
 /// </summary>
+/// <remarks>
+/// Seulement le nom et l'identifiant de l'événement, jamais son contenu : il peut reprendre la réponse du service distant,
+/// une URL ou des en-têtes. Le code HTTP d'un refus est journalisé par <see cref="GoogleAuthHandler"/>.
+/// </remarks>
 public sealed class OpenTelemetryErrorListener : EventListener
 {
+    public const string ExporterSource = "OpenTelemetry-Exporter-OpenTelemetryProtocol";
+
     protected override void OnEventSourceCreated(EventSource source)
     {
-        if (source.Name.StartsWith("OpenTelemetry", StringComparison.Ordinal))
-            EnableEvents(source, EventLevel.Warning);
+        if (source.Name == ExporterSource) EnableEvents(source, EventLevel.Warning);
     }
 
-    protected override void OnEventWritten(EventWrittenEventArgs e)
-    {
-        var message = e.Message is { } format && e.Payload is { Count: > 0 } payload
-            ? SafeFormat(format, payload)
-            : string.Join(" | ", e.Payload ?? []);
-        Console.Error.WriteLine($"OpenTelemetry {e.Level} [{e.EventSource.Name}] {message}");
-    }
-
-    private static string SafeFormat(string format, IReadOnlyCollection<object?> payload)
-    {
-        try { return string.Format(format, [.. payload]); }
-        catch (FormatException) { return format + " | " + string.Join(" | ", payload); }
-    }
+    protected override void OnEventWritten(EventWrittenEventArgs e) =>
+        Console.Error.WriteLine($"OpenTelemetry {e.Level} : {e.EventName} (événement {e.EventId}) — export des traces en échec");
 }
