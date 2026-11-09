@@ -5,14 +5,30 @@ on:
     branches: [main]
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   build-test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
         with:
           dotnet-version: 10.0.x
+
+      # Émulateur Firestore : le registre de consommation de production est testé avec le même contrat que la version
+      # en mémoire (tests/Eap.Tests/LedgerTests.cs), sans toucher à la vraie base ni demander d'identifiants.
+      - name: Démarrer l'émulateur Firestore
+        run: |
+          docker run -d --name firestore -p 8080:8080 \
+            gcr.io/google.com/cloudsdktool/google-cloud-cli:592.0.0-emulators \
+            gcloud emulators firestore start --host-port=0.0.0.0:8080
+          for i in $(seq 1 60); do curl -s localhost:8080 > /dev/null && break; sleep 2; done
+          curl -s localhost:8080 > /dev/null || { docker logs firestore; exit 1; }
+
       - run: dotnet restore
       - run: dotnet build --no-restore -c Release
       - run: dotnet test --no-build -c Release --verbosity normal
+        env:
+          FIRESTORE_EMULATOR_HOST: localhost:8080

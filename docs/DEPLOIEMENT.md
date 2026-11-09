@@ -144,9 +144,24 @@ Mise en place dans un projet **sans organisation** (compte Gmail) :
 Le test de santé du déploiement continu passe par IAP avec un jeton d'accès du compte de déploiement, puis appelle `/me` :
 la réponse prouve que le jeton IAP a été émis **et** vérifié par l'application.
 
+## Rôles, registre persistant, traces, barrière de qualité
+
+Mis en place par `infra/setup-finops-trace-evals.ps1` (idempotent), avant le déploiement du code qui s'en sert.
+
+| Fonction | Mise en œuvre | Droit accordé |
+|---|---|---|
+| **Administrateurs** | `Auth__Admins__N` (variables Cloud Run, hors dépôt) ; l'adresse vient du jeton IAP, donc non usurpable. Le tableau FinOps renvoie 403 aux autres | aucun |
+| **Registre de consommation** | Firestore `eap-finops` (Paris, protégé contre la suppression) : agrégats par jour × agent × modèle, compteur par jour × agent × utilisateur haché. Rétention par TTL : 7 jours (quotas), ~13 mois (FinOps) | `eap-api-runtime` : `datastore.user` |
+| **Traces** | OTLP vers `telemetry.googleapis.com`, jeton du compte de service (aucune clé). Ni prompt ni réponse, ni message d'erreur du fournisseur | `eap-api-runtime` : `telemetry.tracesWriter` |
+| **Barrière de qualité** | `evaluate.yml` : campagne des 2 agents avec juge Claude Sonnet, appelée par le déploiement quand un agent, un jeu de test ou le cœur change. Sous le seuil d'une fiche : pas de mise en production | `github-evaluator` (fédération d'identité, main) : lecture des 2 secrets, rien d'autre |
+
+Le compte de déploiement ne lit toujours pas les clés : l'évaluation a son propre compte, limité aux secrets.
+Registre indisponible au moment du contrôle des plafonds : la requête est refusée (503). Après l'appel au modèle :
+la réponse est rendue et l'incident tracé (`eap.ledger.error`).
+
 ## Reste à faire (feuille de route)
 
-- Rôles applicatifs (le tableau FinOps réservé aux administrateurs, par exemple) à partir de l'identité IAP
+- Rôles plus fins (responsable métier d'un agent, lecteur FinOps), et groupes plutôt qu'une liste d'adresses
 - Approbation manuelle avant production (règle de l'environnement GitHub `production`), et campagne d'évaluation avant déploiement
 - Traces vers Cloud Trace, registre de consommation persistant (les plafonds survivront aux redémarrages)
 - Gemini via Vertex AI (authentification IAM, sans clé d'API)

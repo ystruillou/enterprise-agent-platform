@@ -102,7 +102,8 @@ public sealed class AgentRunner(
             throw new InvalidOperationException($"L'agent {agent.Id} est retiré du service.");
 
         var today = DateOnly.FromDateTime(_time.GetUtcNow().UtcDateTime);
-        EnforceBudget(agent, userId, today);
+        // Registre indisponible ici : l'exception remonte et la requête est refusée (dans le doute, on ne dépense pas).
+        await EnforceBudgetAsync(agent, userId, today, ct);
 
         using var activity = Activity.StartActivity($"agent {agent.Id}");
         activity?.SetTag("eap.agent.id", agent.Id);
@@ -142,8 +143,11 @@ public sealed class AgentRunner(
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-            throw new ModelProviderException(provider, model, ex);
+            // Pas le message de l'exception : il peut reprendre le corps d'erreur du fournisseur, et la trace part
+            // vers Cloud Trace. Seulement des champs maîtrisés.
+            var failure = new ModelProviderException(provider, model, ex);
+            activity?.SetStatus(ActivityStatusCode.Error, $"fournisseur {provider} : HTTP {failure.HttpStatus} ({ex.GetType().Name})");
+            throw failure;
         }
         var latency = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
         // Un alias (ex. "gemini-flash-latest") peut être servi par une autre version : on trace la version réelle.
@@ -160,7 +164,15 @@ public sealed class AgentRunner(
             _time.GetUtcNow(), traceId, agent.Id, agent.Version, userId,
             provider, model, servedModel, inputTokens, outputTokens,
             cost, CostEstimated: price is null, latency);
-        ledger.Record(usage);
+        try
+        {
+            await ledger.RecordAsync(usage, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // L'appel au modèle est déjà consommé : l'utilisateur reçoit sa réponse, l'incident est tracé.
+            activity?.AddEvent(new ActivityEvent("eap.ledger.error", tags: new ActivityTagsCollection { ["type"] = ex.GetType().Name }));
+        }
 
         activity?.SetTag("eap.cost.usd", (double)cost);
         activity?.SetTag("eap.sources.count", chunks.Count);
@@ -189,13 +201,13 @@ public sealed class AgentRunner(
             ModelAnswer: actions.Count > 0 ? response.Text : null);
     }
 
-    private void EnforceBudget(AgentManifest agent, string userId, DateOnly today)
+    private async Task EnforceBudgetAsync(AgentManifest agent, string userId, DateOnly today, CancellationToken ct)
     {
-        if (ledger.CostToday(agent.Id, today) >= agent.Budget.DailyUsd)
+        if (await ledger.CostTodayAsync(agent.Id, today, ct) >= agent.Budget.DailyUsd)
             throw new QuotaExceededException(
                 $"Budget quotidien de l'agent {agent.Id} atteint ({agent.Budget.DailyUsd} USD).");
 
-        if (ledger.RequestsToday(agent.Id, userId, today) >= agent.Budget.MaxRequestsPerUserPerDay)
+        if (await ledger.RequestsTodayAsync(agent.Id, userId, today, ct) >= agent.Budget.MaxRequestsPerUserPerDay)
             throw new QuotaExceededException(
                 $"Quota atteint : {agent.Budget.MaxRequestsPerUserPerDay} requêtes par jour et par utilisateur.");
     }

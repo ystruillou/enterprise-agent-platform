@@ -18,11 +18,20 @@ public sealed class AuthOptions
     public AuthMode Mode { get; set; } = AuthMode.Iap;
     /// <summary>Audience attendue pour Cloud Run : <c>/projects/NUMERO/locations/REGION/services/SERVICE</c>.</summary>
     public string? IapAudience { get; set; }
+    /// <summary>
+    /// Adresses des administrateurs (tableau FinOps). Fournies par l'environnement (Auth__Admins__0…), jamais dans le dépôt.
+    /// L'adresse vient du jeton IAP, donc vérifiée par Google : elle ne peut pas être usurpée comme un en-tête libre.
+    /// </summary>
+    public List<string> Admins { get; set; } = [];
+
+    public bool IsAdmin(string? email) =>
+        email is { Length: > 0 } && Admins.Any(a => string.Equals(a.Trim(), email, StringComparison.OrdinalIgnoreCase));
 }
 
 /// <param name="UserId">Identifiant stable et pseudonyme (sert aux quotas et aux traces) : jamais l'adresse e-mail.</param>
 /// <param name="Email">Adresse de l'utilisateur, renvoyée à lui seul (<c>/me</c>), ni journalisée ni tracée.</param>
-public sealed record CallerIdentity(string UserId, string? Email);
+/// <param name="IsAdmin">Rôle applicatif : accès au tableau FinOps (consommation de tous les utilisateurs).</param>
+public sealed record CallerIdentity(string UserId, string? Email, bool IsAdmin = false);
 
 /// <summary>Clés publiques qui signent les jetons IAP.</summary>
 public interface IIapKeySource

@@ -1,8 +1,13 @@
+using Eap.Api.FinOps;
 using Eap.Api.Identity;
+using Eap.Api.Observability;
 using Eap.Core.Agents;
 using Eap.Core.FinOps;
 using Eap.Core.Knowledge;
 using Eap.Core.Models;
+using Google.Apis.Auth.OAuth2;
+using Google.Cloud.Firestore;
+using OpenTelemetry.Exporter;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 
@@ -20,7 +25,25 @@ var providers = builder.Configuration.GetSection("Providers").Get<Dictionary<str
     ?? throw new InvalidOperationException("Section 'Providers' absente de la configuration.");
 builder.Services.AddSingleton(new ChatClientFactory(
     new Dictionary<string, ProviderOptions>(providers, StringComparer.OrdinalIgnoreCase)));
-builder.Services.AddSingleton<IUsageLedger, InMemoryUsageLedger>();
+// Registre de consommation : en mémoire par défaut (développement, tests) ; Firestore en production, pour que les
+// plafonds de dépense survivent aux redémarrages et soient partagés entre instances.
+var gcpProject = builder.Configuration["Gcp:ProjectId"];
+if (string.Equals(builder.Configuration["FinOps:Ledger"], "Firestore", StringComparison.OrdinalIgnoreCase))
+{
+    if (string.IsNullOrWhiteSpace(gcpProject))
+        throw new InvalidOperationException("Gcp:ProjectId est obligatoire avec FinOps:Ledger = Firestore.");
+    var firestore = new FirestoreDbBuilder
+    {
+        ProjectId = gcpProject,
+        DatabaseId = builder.Configuration["FinOps:FirestoreDatabase"] is { Length: > 0 } dbId ? dbId : "(default)",
+        EmulatorDetection = Google.Api.Gax.EmulatorDetection.EmulatorOrProduction, // émulateur si FIRESTORE_EMULATOR_HOST
+    }.Build();
+    builder.Services.AddSingleton<IUsageLedger>(new FirestoreUsageLedger(firestore));
+}
+else
+{
+    builder.Services.AddSingleton<IUsageLedger, InMemoryUsageLedger>();
+}
 builder.Services.AddSingleton(TimeProvider.System);
 
 ModelOverride? modelOverride = builder.Configuration["Platform:ProviderOverride"] is { Length: > 0 } forced
@@ -52,15 +75,32 @@ if (auth.Mode == AuthMode.Iap)
     builder.Services.AddSingleton(sp => new IapTokenValidator(sp.GetRequiredService<IIapKeySource>(), auth.IapAudience));
 }
 
-// --- Traçabilité : OpenTelemetry, export OTLP (Langfuse, Cloud Trace, Jaeger…) ---------
+// --- Traçabilité : OpenTelemetry, export OTLP (Cloud Trace, Langfuse, Jaeger…) ---------
+var cloudTrace = builder.Configuration.GetValue<bool>("Observability:CloudTrace");
+if (cloudTrace && string.IsNullOrWhiteSpace(gcpProject))
+    throw new InvalidOperationException("Gcp:ProjectId est obligatoire avec Observability:CloudTrace.");
 builder.Services.AddOpenTelemetry()
-    .ConfigureResource(r => r.AddService("enterprise-agent-platform"))
+    .ConfigureResource(r =>
+    {
+        r.AddService("enterprise-agent-platform");
+        if (cloudTrace) r.AddAttributes([new("gcp.project_id", gcpProject!)]); // projet de destination des traces
+    })
     .WithTracing(t =>
     {
         t.AddSource(AgentRunner.Activity.Name, ChatClientFactory.TelemetrySource)
          .AddAspNetCoreInstrumentation()
          .AddHttpClientInstrumentation();
-        // Activé seulement si OTEL_EXPORTER_OTLP_ENDPOINT est défini.
+        // Cloud Trace : point d'entrée OTLP de Google, authentifié par le compte de service de Cloud Run (aucune clé).
+        // Le contenu des prompts et des réponses n'est pas tracé (EnableSensitiveData = false, voir ChatClientFactory).
+        if (cloudTrace)
+            t.AddOtlpExporter("cloudtrace", o =>
+            {
+                o.Endpoint = new Uri("https://telemetry.googleapis.com/v1/traces");
+                o.Protocol = OtlpExportProtocol.HttpProtobuf;
+                var credential = GoogleCredential.GetApplicationDefault().CreateScoped(GoogleAuthHandler.Scope);
+                o.HttpClientFactory = () => new HttpClient(new GoogleAuthHandler(credential));
+            });
+        // Autre destination (Langfuse, Jaeger…) : activée seulement si OTEL_EXPORTER_OTLP_ENDPOINT est défini.
         if (!string.IsNullOrEmpty(builder.Configuration["OTEL_EXPORTER_OTLP_ENDPOINT"]))
             t.AddOtlpExporter();
     });
@@ -80,10 +120,12 @@ app.Use(async (http, next) =>
         await next();
         return;
     }
+    // En développement (mode Header), tout appelant est administrateur : il n'y a de toute façon aucune authentification.
     CallerIdentity? caller = auth.Mode == AuthMode.Header
-        ? new(http.Request.Headers["X-User-Id"].FirstOrDefault() is { Length: > 0 } u ? u : "anonymous", null)
+        ? new(http.Request.Headers["X-User-Id"].FirstOrDefault() is { Length: > 0 } u ? u : "anonymous", null, IsAdmin: true)
         : await http.RequestServices.GetRequiredService<IapTokenValidator>()
             .ValidateAsync(http.Request.Headers[IapTokenValidator.HeaderName].FirstOrDefault(), http.RequestAborted);
+    if (caller is { Email: { } email } && auth.Mode == AuthMode.Iap) caller = caller with { IsAdmin = auth.IsAdmin(email) };
     if (caller is null)
     {
         // Message neutre : on ne dit pas pourquoi le jeton est refusé.
@@ -99,7 +141,7 @@ app.Use(async (http, next) =>
 app.MapGet("/me", (HttpContext http) =>
 {
     var caller = (CallerIdentity)http.Items[nameof(CallerIdentity)]!;
-    return Results.Ok(new { caller.Email, AuthMode = auth.Mode.ToString() });
+    return Results.Ok(new { caller.Email, AuthMode = auth.Mode.ToString(), caller.IsAdmin });
 });
 
 // Registre public des agents (vue "fiche agent", sans le prompt).
@@ -141,6 +183,18 @@ app.MapPost("/agents/{id}/chat", async (string id, ChatRequest request, HttpCont
     }
     catch (ModelProviderException ex)
     {
+        return ProviderUnavailable(ex);
+    }
+    catch (Exception ex) when (ex is not OperationCanceledException)
+    {
+        // Registre de consommation (Firestore) ou autre dépendance indisponible : refus propre, sans détail au client.
+        logger.LogError("Dépendance indisponible pour l'agent {AgentId} ({ExceptionType})", id, ex.GetType().Name);
+        return Results.Json(new { error = "Service momentanément indisponible. Réessayez plus tard." },
+            statusCode: StatusCodes.Status503ServiceUnavailable);
+    }
+
+    IResult ProviderUnavailable(ModelProviderException ex)
+    {
         // Pas de pile d'exception ni de contenu externe dans les journaux : seulement des champs maîtrisés.
         logger.LogError("Échec du fournisseur {Provider} / {Model} pour l'agent {AgentId} : HTTP {HttpStatus} {ProviderErrorCode} ({ExceptionType})",
             ex.Provider, ex.Model, id, ex.HttpStatus, ex.ProviderErrorCode, ex.InnerException?.GetType().Name);
@@ -151,10 +205,13 @@ app.MapPost("/agents/{id}/chat", async (string id, ChatRequest request, HttpCont
 });
 
 // Tableau de bord FinOps (agrégats du jour).
-app.MapGet("/finops/usage", (IUsageLedger ledger, TimeProvider time, DateOnly? day) =>
+app.MapGet("/finops/usage", async (HttpContext http, IUsageLedger ledger, TimeProvider time, DateOnly? day, CancellationToken ct) =>
 {
+    // Consommation de tous les utilisateurs et coûts : réservé aux administrateurs.
+    if (!((CallerIdentity)http.Items[nameof(CallerIdentity)]!).IsAdmin)
+        return Results.Json(new { error = "Réservé aux administrateurs." }, statusCode: StatusCodes.Status403Forbidden);
     var d = day ?? DateOnly.FromDateTime(time.GetUtcNow().UtcDateTime);
-    var lines = ledger.Summarize(d);
+    var lines = await ledger.SummarizeAsync(d, ct);
     return Results.Ok(new { Day = d, TotalUsd = lines.Sum(l => l.CostUsd), Lines = lines });
 });
 

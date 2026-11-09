@@ -122,7 +122,7 @@ public class IdentityTests(WebApplicationFactory<Program> factory) : IClassFixtu
 
     // --- Intégration : l'API en mode IAP --------------------------------------------------
 
-    private HttpClient IapClient() => factory
+    private HttpClient IapClient(string? admin = null) => factory
         .WithWebHostBuilder(b =>
         {
             b.UseSetting("Platform:AgentsPath", CoreTests.AgentsRoot);
@@ -130,6 +130,7 @@ public class IdentityTests(WebApplicationFactory<Program> factory) : IClassFixtu
             b.UseSetting("Platform:EmbeddingProviderOverride", "fake");
             b.UseSetting("Auth:Mode", "Iap");
             b.UseSetting("Auth:IapAudience", Audience);
+            if (admin is not null) b.UseSetting("Auth:Admins:0", admin);
             b.ConfigureTestServices(s => s.AddSingleton<IIapKeySource>(new FakeKeySource([GoogleKey])));
         })
         .CreateClient();
@@ -152,10 +153,25 @@ public class IdentityTests(WebApplicationFactory<Program> factory) : IClassFixtu
         var client = IapClient();
         client.DefaultRequestHeaders.Add(IapTokenValidator.HeaderName, Token());
 
-        var me = await client.GetFromJsonAsync<Dictionary<string, string>>("/me");
-        Assert.Equal("alice@example.com", me!["email"]);
+        var me = await client.GetFromJsonAsync<System.Text.Json.JsonElement>("/me");
+        Assert.Equal("alice@example.com", me.GetProperty("email").GetString());
         var chat = await client.PostAsJsonAsync("/agents/sav-produit/chat", new { message = "Prix de la bouilloire ?" });
         Assert.Equal(HttpStatusCode.OK, chat.StatusCode);
+    }
+
+    [Theory]
+    [InlineData(null, false)]                  // aucun administrateur déclaré
+    [InlineData("bob@example.com", false)]     // un autre est administrateur
+    [InlineData("ALICE@example.com", true)]    // casse indifférente
+    public async Task FinOps_dashboard_is_reserved_to_admins(string? admin, bool expectedAdmin)
+    {
+        var client = IapClient(admin);
+        client.DefaultRequestHeaders.Add(IapTokenValidator.HeaderName, Token()); // jeton d'alice@example.com
+
+        var usage = await client.GetAsync("/finops/usage");
+        Assert.Equal(expectedAdmin ? HttpStatusCode.OK : HttpStatusCode.Forbidden, usage.StatusCode);
+        var me = await client.GetFromJsonAsync<System.Text.Json.JsonElement>("/me");
+        Assert.Equal(expectedAdmin, me.GetProperty("isAdmin").GetBoolean());
     }
 
     [Fact]

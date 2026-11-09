@@ -1,12 +1,16 @@
 # Déploiement continu sur Cloud Run, SANS clé stockée chez GitHub.
 # GitHub présente un jeton OIDC signé ; Google l'échange (Workload Identity Federation) contre un accès temporaire au compte
 # github-deployer, accordé seulement à CE dépôt (identifiant numérique) et à la branche main. Voir docs/DEPLOIEMENT.md.
+#
+# Étapes : détection des changements → évaluation des agents avec modèle juge (si un agent, un jeu de test ou le cœur
+# de la plateforme a changé) → tests, image, déploiement, test de santé. Un agent sous son seuil bloque la mise en production.
 name: Deploy
 
 on:
   push:
     branches: [main]
-    paths: ["src/Eap.Core/**", "src/Eap.Api/**", "agents/**", "Dockerfile", ".dockerignore", ".github/workflows/deploy.yml"]
+    paths: ["src/Eap.Core/**", "src/Eap.Api/**", "src/Eap.Evals/**", "agents/**", "evals/**", "Dockerfile", ".dockerignore",
+            ".github/workflows/deploy.yml", ".github/workflows/evaluate.yml"]
   workflow_dispatch:
 
 # Un seul déploiement à la fois ; un déploiement en cours n'est jamais interrompu.
@@ -29,7 +33,39 @@ env:
   IMAGE: europe-west9-docker.pkg.dev/eap-portfolio/cloud-run-source-deploy/eap-api
 
 jobs:
+  # Une campagne avec juge coûte ~0,35 $ : on ne la lance que si le comportement d'un agent peut avoir changé.
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      agents: ${{ steps.diff.outputs.agents }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+      - id: diff
+        env:
+          BEFORE: ${{ github.event.before }}
+        run: |
+          # Lancement manuel, nouvelle branche ou historique réécrit : on évalue (dans le doute, on mesure).
+          if [ "${GITHUB_EVENT_NAME}" != "push" ] || ! git cat-file -e "${BEFORE}^{commit}" 2>/dev/null; then
+            echo "agents=true" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          git diff --name-only "${BEFORE}" "${GITHUB_SHA}" | tee changed.txt
+          if grep -qE '^(agents|evals|src/Eap\.Core|src/Eap\.Evals)/|^\.github/workflows/evaluate\.yml$' changed.txt; then
+            echo "agents=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "agents=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  evaluate:
+    needs: changes
+    if: needs.changes.outputs.agents == 'true'
+    uses: ./.github/workflows/evaluate.yml
+
   deploy:
+    needs: [changes, evaluate]
+    # Évaluation réussie, ou inutile (aucun agent modifié) ; jamais après un échec ou une annulation.
+    if: ${{ !cancelled() && needs.changes.result == 'success' && (needs.evaluate.result == 'success' || needs.evaluate.result == 'skipped') }}
     runs-on: ubuntu-latest
     environment: production
     steps:
@@ -55,11 +91,13 @@ jobs:
           docker build -t "${IMAGE}:${GITHUB_SHA}" .
           docker push "${IMAGE}:${GITHUB_SHA}"
 
-      # Seule l'image change, plus l'audience attendue des jetons IAP (vérifiés par l'application) : compte de service,
-      # secrets, IAP, accès privé et plafond d'instances sont conservés.
+      # Seule l'image change, plus la configuration non secrète (audience IAP, registre Firestore, Cloud Trace) :
+      # compte de service, secrets, IAP, administrateurs, accès privé et plafond d'instances sont conservés.
       - name: Déployer
         run: |
-          gcloud run deploy "${SERVICE}" --image "${IMAGE}:${GITHUB_SHA}" --region "${REGION}" --project "${PROJECT_ID}"             --update-env-vars "Auth__IapAudience=/projects/920819552333/locations/${REGION}/services/${SERVICE}"             --labels "commit=${GITHUB_SHA::12}" --quiet
+          gcloud run deploy "${SERVICE}" --image "${IMAGE}:${GITHUB_SHA}" --region "${REGION}" --project "${PROJECT_ID}" \
+            --update-env-vars "Auth__IapAudience=/projects/920819552333/locations/${REGION}/services/${SERVICE},Gcp__ProjectId=${PROJECT_ID},FinOps__Ledger=Firestore,FinOps__FirestoreDatabase=eap-finops,Observability__CloudTrace=true" \
+            --labels "commit=${GITHUB_SHA::12}" --quiet
 
       # Jeton d'accès (openid + email) : IAP l'accepte pour un compte de service autorisé (iap.httpsResourceAccessor).
       - id: iaptoken

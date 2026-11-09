@@ -27,35 +27,43 @@ public sealed record UsageSummary(
     long OutputTokens,
     decimal CostUsd);
 
-/// <summary>Registre de consommation. Implémentation en mémoire pour l'instant (PostgreSQL ou BigQuery ensuite).</summary>
+/// <summary>
+/// Registre de consommation : sert aux plafonds (budget par agent, quota par utilisateur) et au tableau FinOps.
+/// En mémoire en développement et en évaluation ; persistant en production (Firestore), pour que les plafonds
+/// survivent aux redémarrages et soient partagés entre instances.
+/// </summary>
 public interface IUsageLedger
 {
-    void Record(UsageRecord record);
-    decimal CostToday(string agentId, DateOnly day);
-    int RequestsToday(string agentId, string userId, DateOnly day);
-    IReadOnlyList<UsageSummary> Summarize(DateOnly day);
+    Task RecordAsync(UsageRecord record, CancellationToken ct = default);
+    Task<decimal> CostTodayAsync(string agentId, DateOnly day, CancellationToken ct = default);
+    Task<int> RequestsTodayAsync(string agentId, string userId, DateOnly day, CancellationToken ct = default);
+    Task<IReadOnlyList<UsageSummary>> SummarizeAsync(DateOnly day, CancellationToken ct = default);
 }
 
 public sealed class InMemoryUsageLedger : IUsageLedger
 {
     private readonly ConcurrentQueue<UsageRecord> _records = new();
 
-    public void Record(UsageRecord record) => _records.Enqueue(record);
+    public Task RecordAsync(UsageRecord record, CancellationToken ct = default)
+    {
+        _records.Enqueue(record);
+        return Task.CompletedTask;
+    }
 
-    public decimal CostToday(string agentId, DateOnly day) =>
-        OfDay(day).Where(r => r.AgentId == agentId).Sum(r => r.CostUsd);
+    public Task<decimal> CostTodayAsync(string agentId, DateOnly day, CancellationToken ct = default) =>
+        Task.FromResult(OfDay(day).Where(r => r.AgentId == agentId).Sum(r => r.CostUsd));
 
-    public int RequestsToday(string agentId, string userId, DateOnly day) =>
-        OfDay(day).Count(r => r.AgentId == agentId && r.UserId == userId);
+    public Task<int> RequestsTodayAsync(string agentId, string userId, DateOnly day, CancellationToken ct = default) =>
+        Task.FromResult(OfDay(day).Count(r => r.AgentId == agentId && r.UserId == userId));
 
-    public IReadOnlyList<UsageSummary> Summarize(DateOnly day) =>
-        OfDay(day)
+    public Task<IReadOnlyList<UsageSummary>> SummarizeAsync(DateOnly day, CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<UsageSummary>>(OfDay(day)
             .GroupBy(r => (r.AgentId, r.Provider, r.Model))
             .Select(g => new UsageSummary(
                 g.Key.AgentId, g.Key.Provider, g.Key.Model, g.Count(),
                 g.Sum(r => r.InputTokens), g.Sum(r => r.OutputTokens), g.Sum(r => r.CostUsd)))
             .OrderByDescending(s => s.CostUsd)
-            .ToList();
+            .ToList());
 
     private IEnumerable<UsageRecord> OfDay(DateOnly day) =>
         _records.Where(r => DateOnly.FromDateTime(r.Timestamp.UtcDateTime) == day);

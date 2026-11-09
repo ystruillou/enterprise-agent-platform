@@ -34,7 +34,7 @@
     <div id="log"></div>
   </div>
 
-  <div class="card">
+  <div class="card" id="finops" hidden>
     <strong>FinOps : consommation du jour</strong> <span id="total" class="muted"></span>
     <table><thead><tr><th>Agent</th><th>Modèle</th><th>Requêtes</th><th>Tokens (entrée/sortie)</th><th>Coût USD</th></tr></thead><tbody id="usage"></tbody></table>
   </div>
@@ -42,6 +42,7 @@
 <script>
   const $ = id => document.getElementById(id);
   let agents = [];
+  let isAdmin = false;
   const userId = (() => { try { let u = localStorage.getItem('eap-user'); if (!u) { u = 'demo-' + Math.random().toString(36).slice(2, 8); localStorage.setItem('eap-user', u); } return u; } catch { return 'demo'; } })();
 
   // En production, l'identité vient de la connexion Google (IAP) ; l'en-tête X-User-Id n'est pris en compte qu'en développement.
@@ -49,7 +50,11 @@
     const r = await fetch('/me');
     if (!r.ok) { $('who').textContent = 'Non connecté.'; return; }
     const me = await r.json();
-    $('who').textContent = me.authMode === 'Iap' ? `Connecté : ${me.email}` : `Mode développement : identité déclarée « ${userId} »`;
+    $('who').textContent = (me.authMode === 'Iap' ? `Connecté : ${me.email}` : `Mode développement : identité déclarée « ${userId} »`)
+      + (me.isAdmin ? ' · administrateur' : '');
+    isAdmin = me.isAdmin;
+    $('finops').hidden = !isAdmin;   // le serveur refuse de toute façon (403) : masquer n'est qu'un confort
+    if (isAdmin) loadUsage();
   }
 
   async function loadAgents() {
@@ -69,7 +74,7 @@
     if (r.ok) { const m = document.createElement('div'); m.className = 'meta';
       m.textContent = `${data.usage.provider}/${data.usage.model} · ${data.usage.inputTokens}+${data.usage.outputTokens} tokens · ${data.usage.costUsd.toFixed(6)} $ · ${data.usage.latencyMs} ms · trace ${data.traceId.slice(0, 12)} · sources : ${data.sources.join(', ') || 'aucune'}`;
       div.appendChild(m); }
-    $('log').prepend(div); $('send').disabled = false; loadUsage();
+    $('log').prepend(div); $('send').disabled = false; if (isAdmin) loadUsage();
   }
 
   async function loadUsage() {
@@ -79,7 +84,7 @@
   }
 
   $('agent').onchange = showPurpose; $('send').onclick = send;
-  loadMe(); loadAgents(); loadUsage();
+  loadMe(); loadAgents();
 </script>
 </body>
 </html>

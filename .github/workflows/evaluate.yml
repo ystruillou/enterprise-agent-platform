@@ -1,0 +1,68 @@
+# Barrière de qualité : campagne d'évaluation des agents sur les vrais modèles, avec modèle juge.
+# Appelée par le déploiement continu avant toute mise en production d'un agent modifié ; lançable aussi à la main.
+# Échoue si un agent passe sous evaluation.min_score de sa fiche : le déploiement n'a alors pas lieu.
+#
+# Clés d'API : aucune chez GitHub. Le compte github-evaluator (fédération d'identité, ce dépôt et main uniquement)
+# lit les 2 clés dans Secret Manager le temps du job ; il ne peut rien faire d'autre. Coût : ~0,35 $ par campagne.
+name: Evaluate
+
+on:
+  workflow_call:
+  workflow_dispatch:
+    inputs:
+      repeat:
+        description: "Passages par cas (3 pour un verdict publiable)"
+        default: "1"
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  WIF_PROVIDER: projects/920819552333/locations/global/workloadIdentityPools/github/providers/github-oidc
+  EVALUATOR: github-evaluator@eap-portfolio.iam.gserviceaccount.com
+  # Juge d'un fournisseur unique pour les deux agents : comparaisons homogènes (le juge gratuit Gemini ne tient pas
+  # une campagne, voir docs/JOURNAL.md). Biais d'auto-préférence possible sur l'agent Claude, mesuré : non visible.
+  JUDGE: anthropic:claude-sonnet-5-5
+
+jobs:
+  evaluate:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false   # un agent refusé n'empêche pas de voir le résultat de l'autre
+      matrix:
+        agent: [sav-produit, conformite-promo]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
+        with:
+          dotnet-version: 10.0.x
+
+      - uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed # v2.1.13
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.EVALUATOR }}
+      - uses: google-github-actions/setup-gcloud@e427ad8a34f8676edf47cf7d7925499adf3eb74f # v2.2.1
+
+      # Masquées dans les journaux avant d'être exposées au job ; jamais écrites sur disque.
+      - name: Lire les clés d'API (Secret Manager)
+        run: |
+          for pair in GEMINI_API_KEY:gemini-api-key ANTHROPIC_API_KEY:anthropic-api-key; do
+            name=${pair%%:*}; secret=${pair#*:}
+            value=$(gcloud secrets versions access latest --secret="$secret" --project=eap-portfolio)
+            echo "::add-mask::$value"
+            echo "$name=$value" >> "$GITHUB_ENV"
+          done
+
+      - name: Campagne d'évaluation (${{ matrix.agent }})
+        run: |
+          dotnet run --project src/Eap.Evals -c Release -- --agent "${{ matrix.agent }}" \
+            --judge "${JUDGE}" --repeat "${{ inputs.repeat || '1' }}" --delay-ms 1000
+
+      - name: Publier le rapport
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: rapport-${{ matrix.agent }}
+          path: evals/reports/*.md
+          if-no-files-found: ignore

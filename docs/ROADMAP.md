@@ -18,7 +18,7 @@ et acquérir l'expérience Google Cloud et Gemini Enterprise.
 ## Semaine 2 : traçabilité et premiers vrais tests
 - [ ] Langfuse (cloud gratuit ou auto-hébergé) branché en OTLP
 - [ ] Versionnage des prompts (version de la fiche dans chaque trace)
-- [ ] Persistance du registre de consommation (PostgreSQL)
+- [x] Persistance du registre de consommation (Firestore plutôt que PostgreSQL : sans serveur, gratuit à ce volume, voir semaine 4)
 - [ ] Test des 4 fournisseurs sur l'agent SAV, avec un tableau qualité / coût / latence
 
 ## Semaine 3 : cadre d'évaluation (avancé au 2026-11-08)
@@ -43,7 +43,10 @@ et acquérir l'expérience Google Cloud et Gemini Enterprise.
 - [x] Cloud Run (Paris, accès privé IAM, 0 à 1 instance) et Secret Manager ; image construite par Cloud Build
 - [ ] Gemini via **Vertex AI** (authentification IAM, pas de clé) en plus d'AI Studio
 - [ ] Claude sans clé statique : fédération d'identité (Cloud Run et GitHub Actions vers l'API Anthropic), comparée à Claude via Vertex AI
-- [ ] Cloud Logging structuré et Cloud Trace
+- [x] Cloud Trace (OTLP, compte de service, sans contenu sensible) ; registre de consommation persistant (Firestore, TTL)
+- [x] Rôle administrateur (tableau FinOps) à partir de l'identité IAP
+- [x] Barrière de qualité : campagne avec modèle juge avant toute mise en production d'un agent modifié
+- [ ] Cloud Logging structuré (champ severity, corrélation journaux ↔ traces)
 - [x] Connexion des utilisateurs par IAP, jeton vérifié par l'application (l'en-tête `X-User-Id` ne vaut plus qu'en développement)
 - [x] Déploiement continu depuis GitHub Actions (Workload Identity Federation, sans clé, actions épinglées)
 

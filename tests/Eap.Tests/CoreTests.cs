@@ -90,7 +90,7 @@ public class CoreTests
         Assert.NotEmpty(reply.Sources);
         Assert.True(reply.Usage.InputTokens > 0);
         Assert.True(reply.Usage.CostUsd > 0);
-        Assert.Single(ledger.Summarize(DateOnly.FromDateTime(DateTime.UtcNow)));
+        Assert.Single(await ledger.SummarizeAsync(DateOnly.FromDateTime(DateTime.UtcNow)));
     }
 
     [Fact]
@@ -154,7 +154,7 @@ public class CoreTests
 
         var ex = await Assert.ThrowsAsync<ModelProviderException>(() => runner.AskAsync(sav, "alice", "Bonjour"));
         Assert.Equal("gemini", ex.Provider);
-        Assert.Empty(ledger.Summarize(DateOnly.FromDateTime(DateTime.UtcNow)));
+        Assert.Empty(await ledger.SummarizeAsync(DateOnly.FromDateTime(DateTime.UtcNow)));
     }
 
     [Theory]
