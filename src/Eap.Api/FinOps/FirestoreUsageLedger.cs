@@ -77,7 +77,21 @@ public sealed class FirestoreUsageLedger(FirestoreDb db) : IUsageLedger
             .ToList();
     }
 
-    private static decimal Cost(DocumentSnapshot d) => d.TryGetValue<long>(CostField, out var nano) ? nano / NanoUsd : 0m;
+    /// <summary>
+    /// Coût d'un agrégat. Lit aussi l'ancien champ en micro-dollars (première version déployée) : sans lui, la consommation
+    /// déjà enregistrée compterait pour zéro et ne consommerait plus le budget du jour. Un document sans aucun champ de coût
+    /// lisible est une anomalie : exception, donc requête refusée (fermé par défaut) plutôt qu'un coût nul.
+    /// </summary>
+    private static decimal Cost(DocumentSnapshot d)
+    {
+        var hasNano = d.TryGetValue<long>(CostField, out var nano);
+        var hasMicro = d.TryGetValue<long>(LegacyMicroCostField, out var micro);
+        if (!hasNano && !hasMicro)
+            throw new InvalidDataException($"Agrégat de consommation sans coût lisible : {d.Reference.Path}");
+        return (nano + micro * 1_000L) / NanoUsd;
+    }
+
+    private const string LegacyMicroCostField = "costMicroUsd";
 
     private static string Day(DateOnly day) => day.ToString("yyyy-MM-dd");
 

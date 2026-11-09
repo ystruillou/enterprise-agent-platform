@@ -18,14 +18,20 @@ public class LedgerTests
         return data;
     }
 
+    /// <summary>Cas propres à Firestore. Sans émulateur, le cas affiché est « (émulateur absent) » : visible, pas silencieux.</summary>
+    public static TheoryData<string> FirestoreOnly() =>
+        new() { string.IsNullOrEmpty(Environment.GetEnvironmentVariable("FIRESTORE_EMULATOR_HOST")) ? "(émulateur absent)" : "firestore" };
+
+    private static FirestoreDb EmulatorDb() => new FirestoreDbBuilder
+    {
+        ProjectId = "eap-test",
+        EmulatorDetection = EmulatorDetection.EmulatorOnly, // jamais la vraie base depuis les tests
+    }.Build();
+
     private static IUsageLedger Create(string kind) => kind switch
     {
         "memoire" => new InMemoryUsageLedger(),
-        "firestore" => new FirestoreUsageLedger(new FirestoreDbBuilder
-        {
-            ProjectId = "eap-test",
-            EmulatorDetection = EmulatorDetection.EmulatorOnly, // jamais la vraie base depuis les tests
-        }.Build()),
+        "firestore" => new FirestoreUsageLedger(EmulatorDb()),
         _ => throw new ArgumentOutOfRangeException(nameof(kind)),
     };
 
@@ -77,5 +83,31 @@ public class LedgerTests
         Assert.Equal("m2", lines[0].Model); // le plus coûteux d'abord
         var m1 = lines.Single(l => l.Model == "m1");
         Assert.Equal((2, 200L, 40L, 0.05m), (m1.Requests, m1.InputTokens, m1.OutputTokens, m1.CostUsd));
+    }
+
+    [Theory]
+    [MemberData(nameof(FirestoreOnly))]
+    public async Task Costs_recorded_in_micro_dollars_by_the_first_version_still_count(string kind)
+    {
+        if (kind != "firestore") return;
+        var db = EmulatorDb();
+        await db.Collection(FirestoreUsageLedger.DailyCollection).Document($"2026-11-09|{_agent}|gemini|ancien").SetAsync(
+            new Dictionary<string, object> { ["day"] = "2026-11-09", ["agentId"] = _agent, ["costMicroUsd"] = 1_500_000L });
+        var ledger = new FirestoreUsageLedger(db);
+        await ledger.RecordAsync(Call("alice", 0.25m));
+
+        Assert.Equal(1.75m, await ledger.CostTodayAsync(_agent, Day)); // 1,5 $ (ancien champ) + 0,25 $
+    }
+
+    [Theory]
+    [MemberData(nameof(FirestoreOnly))]
+    public async Task An_aggregate_without_a_readable_cost_refuses_instead_of_counting_zero(string kind)
+    {
+        if (kind != "firestore") return;
+        var db = EmulatorDb();
+        await db.Collection(FirestoreUsageLedger.DailyCollection).Document($"2026-11-09|{_agent}|gemini|corrompu").SetAsync(
+            new Dictionary<string, object> { ["day"] = "2026-11-09", ["agentId"] = _agent });
+
+        await Assert.ThrowsAsync<InvalidDataException>(() => new FirestoreUsageLedger(db).CostTodayAsync(_agent, Day));
     }
 }
