@@ -338,6 +338,33 @@ signé que **l'application vérifie elle-même** (signature, émetteur, audience
    d'une instance par révision, posée au déploiement, reste celle qui s'applique.
 5. **Pseudonymisation** : quotas et traces utilisent le `sub` Google, jamais l'adresse e-mail.
 
+## 2026-11-09 : rôles, registre persistant, traces, barrière de qualité
+
+| Fonction | Résultat |
+|---|---|
+| Rôle administrateur (tableau FinOps) | Issu du jeton IAP, liste hors dépôt ; 403 pour les autres |
+| Registre de consommation | Firestore à Paris ; agrégats en nano-dollars, utilisateur haché, TTL 7 jours / ~13 mois |
+| Traces | Cloud Trace : requête → agent → embeddings → modèle, avec coût, version, mode de recherche ; aucun contenu |
+| Barrière de qualité | Premier passage : SAV 100 %, conformité 90 % → déploiement. Sautée quand aucun agent ne change (0 $) |
+
+**Enseignements :**
+
+1. **L'émulateur Firestore a trouvé un bug que la version en mémoire ne pouvait pas montrer.** Les coûts en micro-dollars
+   arrondissaient chaque appel (0,0000283 $ comptés 28 µ$) : 1 % d'écart sur les petits appels. Passage aux
+   nano-dollars, exacts avec des tarifs au centime par million de tokens. Même contrat de test pour les deux registres.
+2. **La revue de sécurité automatique a évité deux erreurs** : un budget contourné si d'anciens documents comptaient
+   pour zéro (désormais : ancien champ relu, coût illisible = refus), et un jeton Google qui aurait pu partir vers une
+   autre destination OTLP (désormais : options d'export dédiées, jeton limité à `telemetry.googleapis.com`).
+3. **Des traces perdues sans un mot.** L'exportateur OTLP appelle la méthode synchrone `Send` ; seul `SendAsync`
+   était redéfini, et l'appel partait sans jeton. OpenTelemetry n'écrivant ses erreurs que sur EventSource, rien
+   n'apparaissait : il a fallu un écouteur pour lire « unregistered callers ». Ma première hypothèse (la fabrique
+   `IHttpClientFactory`) était fausse : le test de bout en bout à travers le vrai exportateur l'a montré en échouant
+   dans les deux configurations. La documentation de l'exportateur le dit pourtant explicitement.
+4. **Cloud Run facturé à la requête et export différé.** Le processeur n'est alloué que pendant une requête : les traces
+   partent à la requête suivante (ou à l'arrêt de l'instance). Acceptable à ce volume ; sinon, processeur toujours
+   alloué (quelques centimes par réveil) ou export avant la fin de la réponse (latence).
+5. **Coût de la barrière** : ~0,37 $ par campagne avec juge Sonnet, seulement quand un agent, un jeu de test ou le cœur change.
+
 ## Coût observé lors du premier branchement
 
 **Coût observé :** 4 questions pour environ 0,0012 $ avec `gemini-3.5-flash-lite`, soit environ 0,0003 $ par réponse et
