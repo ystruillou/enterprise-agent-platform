@@ -18,7 +18,13 @@ public sealed class FirestoreUsageLedger(FirestoreDb db) : IUsageLedger
 {
     public const string DailyCollection = "usage_daily";
     public const string UserCollection = "usage_user_daily";
-    private const decimal MicroUsd = 1_000_000m;
+    /// <summary>
+    /// Nano-dollars entiers. Les micro-dollars arrondissaient chaque appel (0,0000283 $ comptés 28 µ$ au lieu de 28,3) :
+    /// 1 % d'écart sur de petits appels, trouvé par les tests sur l'émulateur Firestore. Avec des tarifs au centime par
+    /// million de tokens, un token coûte un nombre entier de nano-dollars : la somme est exacte. Plafond : 9 milliards de $.
+    /// </summary>
+    private const decimal NanoUsd = 1_000_000_000m;
+    private const string CostField = "costNanoUsd";
     /// <summary>Rétention (politique TTL Firestore sur <c>expireAt</c>) : le quota d'un utilisateur ne sert que le jour même.</summary>
     public static readonly TimeSpan UserCounterRetention = TimeSpan.FromDays(7);
     public static readonly TimeSpan DailyAggregateRetention = TimeSpan.FromDays(400);
@@ -33,8 +39,8 @@ public sealed class FirestoreUsageLedger(FirestoreDb db) : IUsageLedger
             ["requests"] = FieldValue.Increment(1),
             ["inputTokens"] = FieldValue.Increment(r.InputTokens),
             ["outputTokens"] = FieldValue.Increment(r.OutputTokens),
-            // Micro-dollars entiers : pas d'arrondi flottant qui s'accumule sur des milliers d'appels.
-            ["costMicroUsd"] = FieldValue.Increment((long)Math.Round(r.CostUsd * MicroUsd)),
+            // Entiers : pas d'arrondi flottant qui s'accumule sur des milliers d'appels.
+            [CostField] = FieldValue.Increment((long)Math.Round(r.CostUsd * NanoUsd)),
             ["expireAt"] = Expiry(day, DailyAggregateRetention),
         }, SetOptions.MergeAll);
         batch.Set(db.Collection(UserCollection).Document(UserId(day, r.AgentId, r.UserId)), new Dictionary<string, object>
@@ -50,7 +56,7 @@ public sealed class FirestoreUsageLedger(FirestoreDb db) : IUsageLedger
     {
         var snapshot = await db.Collection(DailyCollection)
             .WhereEqualTo("day", Day(day)).WhereEqualTo("agentId", agentId).GetSnapshotAsync(ct);
-        return snapshot.Documents.Sum(d => d.GetValue<long>("costMicroUsd")) / MicroUsd;
+        return snapshot.Documents.Sum(Cost);
     }
 
     public async Task<int> RequestsTodayAsync(string agentId, string userId, DateOnly day, CancellationToken ct = default)
@@ -66,10 +72,12 @@ public sealed class FirestoreUsageLedger(FirestoreDb db) : IUsageLedger
             .Select(d => new UsageSummary(
                 d.GetValue<string>("agentId"), d.GetValue<string>("provider"), d.GetValue<string>("model"),
                 (int)d.GetValue<long>("requests"), d.GetValue<long>("inputTokens"), d.GetValue<long>("outputTokens"),
-                d.GetValue<long>("costMicroUsd") / MicroUsd))
+                Cost(d)))
             .OrderByDescending(s => s.CostUsd)
             .ToList();
     }
+
+    private static decimal Cost(DocumentSnapshot d) => d.TryGetValue<long>(CostField, out var nano) ? nano / NanoUsd : 0m;
 
     private static string Day(DateOnly day) => day.ToString("yyyy-MM-dd");
 
