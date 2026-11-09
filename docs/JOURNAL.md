@@ -287,6 +287,21 @@ Un jugement sur 60 est resté sans note (réponse du juge illisible) : le cas es
 **Non-régression du SAV** avec le nouveau contrôle (3 passages, sans juge) : 100 %, 9 corrections du garde-fou, toutes de
 vraies inventions (« Instructions générales », « Consignes de service »). Coût de l'étape : environ 0,70 $.
 
+## 2026-11-09 : premier déploiement sur Cloud Run
+
+Voir [DEPLOIEMENT.md](DEPLOIEMENT.md). API privée à Paris, clés dans Secret Manager, compte de service dédié, budget de 10 €/mois.
+
+1. **Privé par défaut.** Tant que l'identité de l'utilisateur est un en-tête libre, une URL publique permettrait à
+   n'importe qui de consommer les crédits des modèles. Vérifié : HTTP 403 sans jeton, réponse avec jeton.
+2. **Propagation IAM.** Le droit de lecture du premier secret a échoué (« le compte de service n'existe pas ») quelques
+   secondes après la création du compte, puis réussi en relançant. À prévoir dans un script : nouvelle tentative.
+3. **Les clés ne transitent jamais en clair** : lues dans les variables d'environnement, écrites dans un fichier temporaire
+   sans retour à la ligne final (un `\n` en trop rendrait la clé invalide), supprimé aussitôt.
+4. **Premier appel en production** : SAV en 1,8 s (démarrage à froid compris), 0,0003 $. Relecteur de conformité en 4,4 s.
+   Sur ce dernier, le garde-fou a remplacé une des deux citations. En production, seule la trace dit qu'il est
+   intervenu (`eap.guardrail.actions`) : la citation d'origine n'est visible qu'en évaluation. À trancher : la conserver,
+   pour les administrateurs, dans un journal d'audit protégé ? Cela impose de traiter la question RGPD.
+
 ## Coût observé lors du premier branchement
 
 **Coût observé :** 4 questions pour environ 0,0012 $ avec `gemini-3.5-flash-lite`, soit environ 0,0003 $ par réponse et

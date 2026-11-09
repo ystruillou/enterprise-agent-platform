@@ -18,7 +18,9 @@ multi-modèles (Gemini, Claude, GPT, Qwen), traçable, maîtrisée en coûts et 
 | **RAG** | Recherche par mots-clés, sémantique, hybride (fusion RRF) ou base entière (référentiel court à appliquer en totalité), choisie dans la fiche ; seuil de similarité calibré ; repli automatique sur les mots-clés si les embeddings sont indisponibles |
 | **Garde-fous** | Vérification des sources citées avant de répondre : une source absente de la base est remplacée, l'intervention est tracée |
 | **Qualité** | [Cadre d'évaluation](evals/README.md) : jeux de test, contrôles déterministes (dont la détection des **sources inventées**), modèle juge, seuil de passage en production inscrit dans la fiche et appliqué en CI |
-| **Sécurité** | Aucune clé dans le code (variables d'environnement, puis Secret Manager), validation des entrées *(IAM et IAP en semaine 4)* |
+| **Qualité** (suite) | Modèle juge en **arbitre** des contrôles par mots-clés ambigus, et en second regard sur toutes les réponses |
+| **Sécurité** | Aucune clé dans le code : Secret Manager en production, variables d'environnement en local ; validation des entrées |
+| **Déploiement** | [Cloud Run à Paris](docs/DEPLOIEMENT.md), accès privé IAM, compte de service à moindre privilège, budget avec alertes |
 
 ## Résultats d'évaluation de l'agent SAV
 
@@ -98,6 +100,7 @@ Pour comparer les fournisseurs sur un même agent, forcez-en un :
 ## Feuille de route et retours d'expérience
 
 - [docs/ROADMAP.md](docs/ROADMAP.md) : avancement semaine par semaine
+- [docs/DEPLOIEMENT.md](docs/DEPLOIEMENT.md) : déploiement Google Cloud, choix de sécurité et commandes
 - [docs/JOURNAL.md](docs/JOURNAL.md) : constats terrain (modèles retirés, alias qui dérivent, différences entre couches compatibles OpenAI…)
 
 ## Licence

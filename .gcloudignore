@@ -1,0 +1,12 @@
+# Fichiers envoyés à Cloud Build : seulement ce que le Dockerfile utilise.
+.git/
+.github/
+**/bin/
+**/obj/
+tests/
+evals/
+docs/
+src/Eap.Evals/
+# Markdown à la racine seulement : les prompts et bases de connaissances des agents sont en .md
+/*.md
+.env

@@ -38,11 +38,12 @@ et acquérir l'expérience Google Cloud et Gemini Enterprise.
 - [x] Jeu de test de l'agent conformité promo (20 cas, 8 catégories), mode « base entière », limite de longueur propre à chaque fiche
 - [x] Garde-fou et contrôle des sources adaptés aux citations en ligne ; relecteur 0.3.0 à 97 % (3 passages)
 
-## Semaine 4 : déploiement Google Cloud
-- [ ] Projet GCP, budget et alertes, comptes de service à moindre privilège
+## Semaine 4 : déploiement Google Cloud (commencé le 2026-11-09, voir [DEPLOIEMENT.md](DEPLOIEMENT.md))
+- [x] Projet GCP, budget de 10 €/mois et alertes, compte de service à moindre privilège
+- [x] Cloud Run (Paris, accès privé IAM, 0 à 1 instance) et Secret Manager ; image construite par Cloud Build
 - [ ] Gemini via **Vertex AI** (authentification IAM, pas de clé) en plus d'AI Studio
 - [ ] Claude sans clé statique : fédération d'identité (Cloud Run et GitHub Actions vers l'API Anthropic), comparée à Claude via Vertex AI
-- [ ] Cloud Run, Secret Manager, Cloud Logging et Cloud Trace
+- [ ] Cloud Logging structuré et Cloud Trace
 - [ ] Authentification (IAP ou OIDC) qui remplace l'en-tête `X-User-Id`
 - [ ] Déploiement continu depuis GitHub Actions (Workload Identity Federation)
 
