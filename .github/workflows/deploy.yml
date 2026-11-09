@@ -55,28 +55,37 @@ jobs:
           docker build -t "${IMAGE}:${GITHUB_SHA}" .
           docker push "${IMAGE}:${GITHUB_SHA}"
 
-      # Seule l'image change : compte de service, secrets, accès privé et plafond d'instances sont conservés.
+      # Seule l'image change, plus l'audience attendue des jetons IAP (vérifiés par l'application) : compte de service,
+      # secrets, IAP, accès privé et plafond d'instances sont conservés.
       - name: Déployer
         run: |
-          gcloud run deploy "${SERVICE}" --image "${IMAGE}:${GITHUB_SHA}" --region "${REGION}" --project "${PROJECT_ID}" \
-            --labels "commit=${GITHUB_SHA::12}" --quiet
+          gcloud run deploy "${SERVICE}" --image "${IMAGE}:${GITHUB_SHA}" --region "${REGION}" --project "${PROJECT_ID}"             --update-env-vars "Auth__IapAudience=/projects/920819552333/locations/${REGION}/services/${SERVICE}"             --labels "commit=${GITHUB_SHA::12}" --quiet
 
-      - id: idtoken
+      # Jeton d'accès (openid + email) : IAP l'accepte pour un compte de service autorisé (iap.httpsResourceAccessor).
+      - id: iaptoken
         uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed # v2.1.13
         with:
           workload_identity_provider: ${{ env.WIF_PROVIDER }}
           service_account: ${{ env.DEPLOYER }}
-          token_format: id_token
-          id_token_audience: https://eap-api-920819552333.europe-west9.run.app
-          id_token_include_email: true
+          token_format: access_token
+          access_token_scopes: openid, https://www.googleapis.com/auth/userinfo.email
 
-      # Contrôle après déploiement : le service répond et charge ses 2 agents. Pas d'appel de modèle (aucun coût).
+      # Contrôle après déploiement, sans appel de modèle (aucun coût) :
+      # 1. le service répond et charge ses 2 agents ;
+      # 2. /me renvoie l'identité du déployeur : IAP a signé un jeton ET l'application l'a vérifié, de bout en bout ;
+      # 3. sans identifiants, l'accès est refusé (redirection vers la connexion Google ou 401/403).
       - name: Test de santé
         env:
-          TOKEN: ${{ steps.idtoken.outputs.id_token }}
+          TOKEN: ${{ steps.iaptoken.outputs.access_token }}
+          URL: https://eap-api-920819552333.europe-west9.run.app
         run: |
-          body=$(curl -sf -H "Authorization: Bearer ${TOKEN}" https://eap-api-920819552333.europe-west9.run.app/health)
-          echo "$body"
-          echo "$body" | grep -q '"agents":2'
-          code=$(curl -s -o /dev/null -w '%{http_code}' https://eap-api-920819552333.europe-west9.run.app/health)
-          echo "Sans jeton : HTTP $code"; test "$code" = "403"   # l'accès doit rester privé
+          body=$(curl -sf -H "Authorization: Bearer ${TOKEN}" "${URL}/health")
+          echo "$body"; echo "$body" | grep -q '"agents":2'
+          me=$(curl -sf -H "Authorization: Bearer ${TOKEN}" "${URL}/me")
+          # une vérification par ligne : sous « bash -e », un échec au milieu d'une chaîne && n'arrêterait pas l'étape
+          echo "$me" | grep -q '"authMode":"Iap"'
+          echo "$me" | grep -q 'github-deployer@'
+          echo "Identité IAP vérifiée par l'application"
+          code=$(curl -s -o /dev/null -w '%{http_code}' "${URL}/agents")
+          echo "Sans identifiants : HTTP $code"
+          case "$code" in 302|401|403) ;; *) echo "L'accès devrait être refusé"; exit 1 ;; esac

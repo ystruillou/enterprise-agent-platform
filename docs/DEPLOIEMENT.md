@@ -115,9 +115,38 @@ gcloud run services add-iam-policy-binding eap-api --region=europe-west9 --role=
 gcloud iam service-accounts add-iam-policy-binding eap-api-runtime@eap-portfolio.iam.gserviceaccount.com --role=roles/iam.serviceAccountUser --member=$d
 ```
 
+## Connexion des utilisateurs (Identity-Aware Proxy)
+
+```
+Navigateur ──▶ IAP (connexion Google, liste d'accès) ──jeton signé──▶ Cloud Run eap-api ──▶ vérifie le jeton ──▶ agents
+```
+
+- **IAP filtre en amont** : sans connexion, redirection vers Google ; sans le rôle `iap.httpsResourceAccessor`, refus.
+- **L'application vérifie le jeton qu'IAP ajoute** (`x-goog-iap-jwt-assertion`) : signature ES256 par une clé publiée par
+  Google, émetteur `https://cloud.google.com/iap`, audience `/projects/920819552333/locations/europe-west9/services/eap-api`,
+  expiration. Défense en profondeur : si IAP était désactivé par erreur, l'application refuserait quand même (401).
+- **Identifiant de l'utilisateur** : le `sub` Google, stable et pseudonyme, pour les quotas et les traces. L'adresse
+  e-mail n'est renvoyée qu'à l'utilisateur lui-même (`/me`), jamais journalisée.
+- **Fermé par défaut** : `Auth:Mode` vaut `Iap` sauf en développement (`Header`, en-tête `X-User-Id`) ; en mode IAP sans
+  audience configurée, l'application refuse de démarrer.
+
+Mise en place dans un projet **sans organisation** (compte Gmail) :
+
+1. Écran de consentement OAuth, audience **External**, application en mode test, utilisateurs autorisés listés.
+2. Activation d'IAP sur le service depuis la console (onglet Sécurité) : la première activation ne peut pas se faire en
+   ligne de commande dans ce cas.
+3. Client OAuth « Application Web », URI de redirection `https://iap.googleapis.com/v1/oauth/clientIds/ID_CLIENT:handleRedirect`,
+   appliqué par `infra/set-iap-oauth-client.ps1` (secret saisi masqué, jamais affiché ni conservé). Sans lui, IAP répond
+   « Empty Google Account OAuth client ID(s)/secret(s) » (HTTP 502).
+4. Droits : `infra/grant-iap-access.ps1` (agent IAP → `run.invoker` ; utilisateurs et compte de déploiement →
+   `iap.httpsResourceAccessor`). Ajouter quelqu'un : `-Users alice@example.com`.
+
+Le test de santé du déploiement continu passe par IAP avec un jeton d'accès du compte de déploiement, puis appelle `/me` :
+la réponse prouve que le jeton IAP a été émis **et** vérifié par l'application.
+
 ## Reste à faire (feuille de route)
 
-- Authentification des utilisateurs finaux (IAP ou OIDC) à la place de l'en-tête `X-User-Id`
+- Rôles applicatifs (le tableau FinOps réservé aux administrateurs, par exemple) à partir de l'identité IAP
 - Approbation manuelle avant production (règle de l'environnement GitHub `production`), et campagne d'évaluation avant déploiement
 - Traces vers Cloud Trace, registre de consommation persistant (les plafonds survivront aux redémarrages)
 - Gemini via Vertex AI (authentification IAM, sans clé d'API)

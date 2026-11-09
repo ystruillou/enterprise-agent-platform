@@ -320,6 +320,24 @@ test de santé (2 agents chargés, **403 sans jeton**). 1 min 19 s de bout en bo
    déploiement), Dependabot pour les mettre à jour. Avertissement restant : ces versions ciblent Node.js 20, déprécié
    par GitHub ; les mises à jour majeures proposées par Dependabot le régleront.
 
+## 2026-11-09 : connexion des utilisateurs par Identity-Aware Proxy
+
+L'en-tête libre `X-User-Id` permettait à n'importe quel appelant de se faire passer pour un autre (et de contourner les
+quotas par utilisateur). En production, l'identité vient maintenant d'IAP : connexion Google, liste d'accès, et jeton
+signé que **l'application vérifie elle-même** (signature, émetteur, audience, expiration).
+
+1. **Ne pas faire confiance au proxy seul.** IAP filtre en amont, mais l'application revérifie le jeton : une erreur de
+   configuration (IAP désactivé, accès qui contournerait le proxy) donne un refus, pas un accès anonyme. Mode IAP par
+   défaut ; sans audience configurée, l'application refuse de démarrer.
+2. **Un projet sans organisation demande plus d'étapes manuelles** : première activation d'IAP dans la console, client
+   OAuth à créer soi-même. Diagnostic par la réponse d'IAP elle-même (`x-goog-iap-generated-response`) : HTTP 502
+   « Empty Google Account OAuth client ID(s)/secret(s) ».
+3. **Le secret du client OAuth n'a jamais transité par la conversation** : saisi masqué dans un script, écrit le temps
+   d'un appel, supprimé.
+4. **Effet de bord de la console** : l'enregistrement a créé une limite de 20 instances au niveau du service ; la limite
+   d'une instance par révision, posée au déploiement, reste celle qui s'applique.
+5. **Pseudonymisation** : quotas et traces utilisent le `sub` Google, jamais l'adresse e-mail.
+
 ## Coût observé lors du premier branchement
 
 **Coût observé :** 4 questions pour environ 0,0012 $ avec `gemini-3.5-flash-lite`, soit environ 0,0003 $ par réponse et

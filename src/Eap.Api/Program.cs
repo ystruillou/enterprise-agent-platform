@@ -1,3 +1,4 @@
+using Eap.Api.Identity;
 using Eap.Core.Agents;
 using Eap.Core.FinOps;
 using Eap.Core.Knowledge;
@@ -38,6 +39,19 @@ builder.Services.AddSingleton(sp => new AgentRunner(
     sp.GetRequiredService<TimeProvider>(),
     modelOverride));
 
+// --- Identité de l'appelant ----------------------------------------------------------
+// Production : jeton IAP vérifié. Développement et tests : en-tête X-User-Id (voir appsettings.Development.json).
+var auth = builder.Configuration.GetSection("Auth").Get<AuthOptions>() ?? new AuthOptions();
+if (auth.Mode == AuthMode.Iap)
+{
+    // Échec au démarrage plutôt qu'un service qui accepterait n'importe quel jeton.
+    if (string.IsNullOrWhiteSpace(auth.IapAudience))
+        throw new InvalidOperationException("Auth:IapAudience est obligatoire en mode IAP (/projects/NUMERO/locations/REGION/services/SERVICE).");
+    builder.Services.AddHttpClient<GoogleIapKeySource>();
+    builder.Services.AddSingleton<IIapKeySource>(sp => sp.GetRequiredService<GoogleIapKeySource>());
+    builder.Services.AddSingleton(sp => new IapTokenValidator(sp.GetRequiredService<IIapKeySource>(), auth.IapAudience));
+}
+
 // --- Traçabilité : OpenTelemetry, export OTLP (Langfuse, Cloud Trace, Jaeger…) ---------
 builder.Services.AddOpenTelemetry()
     .ConfigureResource(r => r.AddService("enterprise-agent-platform"))
@@ -57,6 +71,37 @@ app.UseStaticFiles();
 
 app.MapGet("/health", () => Results.Ok(new { status = "ok", agents = registry.All.Count }));
 
+// Toutes les routes de données exigent une identité ; /health et la page statique n'exposent rien.
+app.Use(async (http, next) =>
+{
+    var path = http.Request.Path;
+    if (!(path.StartsWithSegments("/agents") || path.StartsWithSegments("/finops") || path.StartsWithSegments("/me")))
+    {
+        await next();
+        return;
+    }
+    CallerIdentity? caller = auth.Mode == AuthMode.Header
+        ? new(http.Request.Headers["X-User-Id"].FirstOrDefault() is { Length: > 0 } u ? u : "anonymous", null)
+        : await http.RequestServices.GetRequiredService<IapTokenValidator>()
+            .ValidateAsync(http.Request.Headers[IapTokenValidator.HeaderName].FirstOrDefault(), http.RequestAborted);
+    if (caller is null)
+    {
+        // Message neutre : on ne dit pas pourquoi le jeton est refusé.
+        http.Response.StatusCode = StatusCodes.Status401Unauthorized;
+        await http.Response.WriteAsJsonAsync(new { error = "Authentification requise." });
+        return;
+    }
+    http.Items[nameof(CallerIdentity)] = caller;
+    await next();
+});
+
+// L'utilisateur connecté voit sa propre adresse ; elle n'est ni journalisée ni tracée.
+app.MapGet("/me", (HttpContext http) =>
+{
+    var caller = (CallerIdentity)http.Items[nameof(CallerIdentity)]!;
+    return Results.Ok(new { caller.Email, AuthMode = auth.Mode.ToString() });
+});
+
 // Registre public des agents (vue "fiche agent", sans le prompt).
 app.MapGet("/agents", (AgentRegistry reg) => reg.All
     .OrderBy(a => a.Id)
@@ -74,8 +119,8 @@ app.MapPost("/agents/{id}/chat", async (string id, ChatRequest request, HttpCont
     if (string.IsNullOrWhiteSpace(request.Message) || request.Message.Length > 4000)
         return Results.BadRequest(new { error = "Le message doit contenir entre 1 et 4000 caractères." });
 
-    // Identité provisoire : en production, elle viendra de l'IdP (IAP / OIDC), pas d'un en-tête libre.
-    var userId = http.Request.Headers["X-User-Id"].FirstOrDefault() is { Length: > 0 } u ? u : "anonymous";
+    // Identité établie par le middleware (jeton IAP vérifié en production) : sert aux quotas par utilisateur.
+    var userId = ((CallerIdentity)http.Items[nameof(CallerIdentity)]!).UserId;
     try
     {
         var reply = await runner.AskAsync(agent, userId, request.Message, ct);

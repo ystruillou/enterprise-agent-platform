@@ -20,7 +20,7 @@ multi-modèles (Gemini, Claude, GPT, Qwen), traçable, maîtrisée en coûts et 
 | **Qualité** | [Cadre d'évaluation](evals/README.md) : jeux de test, contrôles déterministes (dont la détection des **sources inventées**), modèle juge, seuil de passage en production inscrit dans la fiche et appliqué en CI |
 | **Qualité** (suite) | Modèle juge en **arbitre** des contrôles par mots-clés ambigus, et en second regard sur toutes les réponses |
 | **Sécurité** | Aucune clé dans le code : Secret Manager en production, variables d'environnement en local ; validation des entrées |
-| **Déploiement** | [Cloud Run à Paris](docs/DEPLOIEMENT.md), accès privé IAM, compte de service à moindre privilège, budget avec alertes |
+| **Déploiement** | [Cloud Run à Paris](docs/DEPLOIEMENT.md), connexion Google par IAP (jeton vérifié par l'application), compte de service à moindre privilège, budget avec alertes |
 
 ## Résultats d'évaluation de l'agent SAV
 
@@ -71,7 +71,7 @@ et seulement 2 interventions du garde-fou, inoffensives, contre 9 vraies inventi
 Prérequis : SDK .NET 10.
 
 ```bash
-dotnet test                          # 86 tests, aucun appel payant
+dotnet test                          # 98 tests, aucun appel payant
 dotnet run --project src/Eap.Api     # http://localhost:5xxx
 ```
 

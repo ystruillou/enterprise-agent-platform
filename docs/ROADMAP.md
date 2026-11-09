@@ -44,7 +44,7 @@ et acquérir l'expérience Google Cloud et Gemini Enterprise.
 - [ ] Gemini via **Vertex AI** (authentification IAM, pas de clé) en plus d'AI Studio
 - [ ] Claude sans clé statique : fédération d'identité (Cloud Run et GitHub Actions vers l'API Anthropic), comparée à Claude via Vertex AI
 - [ ] Cloud Logging structuré et Cloud Trace
-- [ ] Authentification (IAP ou OIDC) qui remplace l'en-tête `X-User-Id`
+- [x] Connexion des utilisateurs par IAP, jeton vérifié par l'application (l'en-tête `X-User-Id` ne vaut plus qu'en développement)
 - [x] Déploiement continu depuis GitHub Actions (Workload Identity Federation, sans clé, actions épinglées)
 
 ## Semaine 5 : écosystème Gemini Enterprise

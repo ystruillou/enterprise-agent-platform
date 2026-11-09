@@ -24,6 +24,7 @@
 <main>
   <h1>Enterprise Agent Platform</h1>
   <div class="muted">Démo : agents métier multi-modèles, avec traçabilité, FinOps et gouvernance. Vous échangez avec une IA.</div>
+  <div id="who" class="muted"></div>
 
   <div class="card">
     <label>Agent <select id="agent"></select></label>
@@ -42,6 +43,14 @@
   const $ = id => document.getElementById(id);
   let agents = [];
   const userId = (() => { try { let u = localStorage.getItem('eap-user'); if (!u) { u = 'demo-' + Math.random().toString(36).slice(2, 8); localStorage.setItem('eap-user', u); } return u; } catch { return 'demo'; } })();
+
+  // En production, l'identité vient de la connexion Google (IAP) ; l'en-tête X-User-Id n'est pris en compte qu'en développement.
+  async function loadMe() {
+    const r = await fetch('/me');
+    if (!r.ok) { $('who').textContent = 'Non connecté.'; return; }
+    const me = await r.json();
+    $('who').textContent = me.authMode === 'Iap' ? `Connecté : ${me.email}` : `Mode développement : identité déclarée « ${userId} »`;
+  }
 
   async function loadAgents() {
     agents = await (await fetch('/agents')).json();
@@ -70,7 +79,7 @@
   }
 
   $('agent').onchange = showPurpose; $('send').onclick = send;
-  loadAgents(); loadUsage();
+  loadMe(); loadAgents(); loadUsage();
 </script>
 </body>
 </html>
