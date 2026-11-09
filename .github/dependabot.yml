@@ -1,0 +1,12 @@
+# Les actions du déploiement sont épinglées sur un commit exact : Dependabot propose les mises à jour par PR,
+# relues avant fusion, plutôt que de suivre une étiquette mobile.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+  - package-ecosystem: nuget
+    directory: /
+    schedule:
+      interval: weekly

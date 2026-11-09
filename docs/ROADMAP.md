@@ -45,7 +45,7 @@ et acquérir l'expérience Google Cloud et Gemini Enterprise.
 - [ ] Claude sans clé statique : fédération d'identité (Cloud Run et GitHub Actions vers l'API Anthropic), comparée à Claude via Vertex AI
 - [ ] Cloud Logging structuré et Cloud Trace
 - [ ] Authentification (IAP ou OIDC) qui remplace l'en-tête `X-User-Id`
-- [ ] Déploiement continu depuis GitHub Actions (Workload Identity Federation)
+- [x] Déploiement continu depuis GitHub Actions (Workload Identity Federation, sans clé, actions épinglées)
 
 ## Semaine 5 : écosystème Gemini Enterprise
 - [ ] Agent conformité réécrit en Python avec l'**ADK** (Agent Development Kit)

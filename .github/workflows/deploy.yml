@@ -1,0 +1,82 @@
+# Déploiement continu sur Cloud Run, SANS clé stockée chez GitHub.
+# GitHub présente un jeton OIDC signé ; Google l'échange (Workload Identity Federation) contre un accès temporaire au compte
+# github-deployer, accordé seulement à CE dépôt (identifiant numérique) et à la branche main. Voir docs/DEPLOIEMENT.md.
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+    paths: ["src/Eap.Core/**", "src/Eap.Api/**", "agents/**", "Dockerfile", ".github/workflows/deploy.yml"]
+  workflow_dispatch:
+
+# Un seul déploiement à la fois ; un déploiement en cours n'est jamais interrompu.
+concurrency:
+  group: deploy-eap-api
+  cancel-in-progress: false
+
+# Actions épinglées sur un commit exact (une étiquette comme v2 peut être déplacée) : ce job détient les droits de déploiement.
+permissions:
+  contents: read
+  id-token: write   # nécessaire pour obtenir le jeton OIDC
+
+env:
+  PROJECT_ID: eap-portfolio
+  REGION: europe-west9
+  SERVICE: eap-api
+  # Valeurs publiques (pas des secrets) : sans le jeton OIDC de ce dépôt, elles ne donnent aucun accès.
+  WIF_PROVIDER: projects/920819552333/locations/global/workloadIdentityPools/github/providers/github-oidc
+  DEPLOYER: github-deployer@eap-portfolio.iam.gserviceaccount.com
+  IMAGE: europe-west9-docker.pkg.dev/eap-portfolio/cloud-run-source-deploy/eap-api
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      # Les tests passent avant toute chose : on ne déploie jamais un code qui casse un test.
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
+        with:
+          dotnet-version: 10.0.x
+      - run: dotnet test -c Release
+
+      - id: auth
+        uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed # v2.1.13
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.DEPLOYER }}
+      - uses: google-github-actions/setup-gcloud@e427ad8a34f8676edf47cf7d7925499adf3eb74f # v2.2.1
+
+      # Image étiquetée par le commit : chaque révision Cloud Run se rattache à une version exacte du code et des fiches agents.
+      - name: Construire et pousser l'image
+        run: |
+          gcloud auth configure-docker ${REGION}-docker.pkg.dev --quiet
+          docker build -t "${IMAGE}:${GITHUB_SHA}" .
+          docker push "${IMAGE}:${GITHUB_SHA}"
+
+      # Seule l'image change : compte de service, secrets, accès privé et plafond d'instances sont conservés.
+      - name: Déployer
+        run: |
+          gcloud run deploy "${SERVICE}" --image "${IMAGE}:${GITHUB_SHA}" --region "${REGION}" --project "${PROJECT_ID}" \
+            --labels "commit=${GITHUB_SHA::12}" --quiet
+
+      - id: idtoken
+        uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed # v2.1.13
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.DEPLOYER }}
+          token_format: id_token
+          id_token_audience: https://eap-api-920819552333.europe-west9.run.app
+          id_token_include_email: true
+
+      # Contrôle après déploiement : le service répond et charge ses 2 agents. Pas d'appel de modèle (aucun coût).
+      - name: Test de santé
+        env:
+          TOKEN: ${{ steps.idtoken.outputs.id_token }}
+        run: |
+          body=$(curl -sf -H "Authorization: Bearer ${TOKEN}" https://eap-api-920819552333.europe-west9.run.app/health)
+          echo "$body"
+          echo "$body" | grep -q '"agents":2'
+          code=$(curl -s -o /dev/null -w '%{http_code}' https://eap-api-920819552333.europe-west9.run.app/health)
+          echo "Sans jeton : HTTP $code"; test "$code" = "403"   # l'accès doit rester privé

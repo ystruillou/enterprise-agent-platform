@@ -75,9 +75,49 @@ gcloud run services update eap-api                                  # nouvelle r
 gcloud secrets versions disable 1 --secret gemini-api-key          # désactiver l'ancienne
 ```
 
+## Déploiement continu (GitHub Actions, sans clé)
+
+`.github/workflows/deploy.yml`, à chaque push sur `main` qui touche le code de l'API ou les fiches agents :
+tests → image étiquetée par le commit → `gcloud run deploy --image` → test de santé (2 agents chargés, 403 sans jeton).
+
+**Aucune clé de compte de service chez GitHub.** GitHub présente un jeton OIDC signé ; le fournisseur d'identité
+`github-oidc` ne l'accepte que si `repository_id == 1449833259` (identifiant numérique : un dépôt renommé puis recréé
+sous le même nom n'obtient rien) **et** `ref == refs/heads/main` (une branche ou une PR ne peut pas déployer).
+
+Le compte `github-deployer` a quatre droits, chacun sur la ressource la plus étroite possible :
+
+| Rôle | Portée | Pour |
+|---|---|---|
+| `artifactregistry.writer` | dépôt d'images `cloud-run-source-deploy` | pousser l'image |
+| `run.developer` | service `eap-api` | déployer une révision |
+| `run.invoker` | service `eap-api` | test de santé |
+| `iam.serviceAccountUser` | compte `eap-api-runtime` | attacher l'identité de l'API à la révision |
+
+Il ne peut ni lire les secrets, ni créer de service, ni modifier les droits. Les liaisons sont scriptées dans
+`infra/grant-github-deployer.ps1` (idempotent, à exécuter par un propriétaire du projet).
+
+```powershell
+gcloud services enable iamcredentials.googleapis.com sts.googleapis.com
+gcloud iam workload-identity-pools create github --location=global --display-name="GitHub Actions"
+gcloud iam workload-identity-pools providers create-oidc github-oidc --location=global --workload-identity-pool=github `
+  --issuer-uri="https://token.actions.githubusercontent.com" `
+  --attribute-mapping="google.subject=assertion.sub,attribute.repository_id=assertion.repository_id,attribute.ref=assertion.ref" `
+  --attribute-condition="assertion.repository_id == '1449833259' && assertion.ref == 'refs/heads/main'"
+gcloud iam service-accounts create github-deployer --display-name="GitHub Actions deployer"
+
+$d = "serviceAccount:github-deployer@eap-portfolio.iam.gserviceaccount.com"
+gcloud iam service-accounts add-iam-policy-binding github-deployer@eap-portfolio.iam.gserviceaccount.com `
+  --role=roles/iam.workloadIdentityUser `
+  --member="principalSet://iam.googleapis.com/projects/920819552333/locations/global/workloadIdentityPools/github/attribute.repository_id/1449833259"
+gcloud artifacts repositories add-iam-policy-binding cloud-run-source-deploy --location=europe-west9 --role=roles/artifactregistry.writer --member=$d
+gcloud run services add-iam-policy-binding eap-api --region=europe-west9 --role=roles/run.developer --member=$d
+gcloud run services add-iam-policy-binding eap-api --region=europe-west9 --role=roles/run.invoker --member=$d
+gcloud iam service-accounts add-iam-policy-binding eap-api-runtime@eap-portfolio.iam.gserviceaccount.com --role=roles/iam.serviceAccountUser --member=$d
+```
+
 ## Reste à faire (feuille de route)
 
 - Authentification des utilisateurs finaux (IAP ou OIDC) à la place de l'en-tête `X-User-Id`
-- Déploiement continu depuis GitHub Actions par fédération d'identité (Workload Identity Federation, sans clé)
+- Approbation manuelle avant production (règle de l'environnement GitHub `production`), et campagne d'évaluation avant déploiement
 - Traces vers Cloud Trace, registre de consommation persistant (les plafonds survivront aux redémarrages)
 - Gemini via Vertex AI (authentification IAM, sans clé d'API)
