@@ -77,6 +77,9 @@ if (auth.Mode == AuthMode.Iap)
 
 // --- Traçabilité : OpenTelemetry, export OTLP (Cloud Trace, Langfuse, Jaeger…) ---------
 var cloudTrace = builder.Configuration.GetValue<bool>("Observability:CloudTrace");
+// Les échecs internes d'OpenTelemetry (export refusé…) sont recopiés dans les journaux : sans cela, ils sont muets.
+// Gardé par le conteneur de services : un écouteur collecté par le GC cesserait d'écouter.
+builder.Services.AddSingleton(new OpenTelemetryErrorListener());
 if (cloudTrace && string.IsNullOrWhiteSpace(gcpProject))
     throw new InvalidOperationException("Gcp:ProjectId est obligatoire avec Observability:CloudTrace.");
 builder.Services.AddOpenTelemetry()
@@ -106,6 +109,7 @@ builder.Services.AddOpenTelemetry()
     });
 
 var app = builder.Build();
+if (cloudTrace) app.Logger.LogInformation("Export des traces actif vers Cloud Trace (projet {Project})", gcpProject);
 app.UseDefaultFiles();
 app.UseStaticFiles();
 
